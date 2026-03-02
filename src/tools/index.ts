@@ -1,71 +1,17 @@
 /**
- * Copyright (c) 2025 OpenAgent Team
+ * Copyright (c) 2026 OpenAgent Team
  * Licensed under the MIT License
- * 
- * Tools Index - Export all available tools for agents
  */
 
-// File system tools - Real filesystem operations (different names to avoid Deep Agents conflicts)
-export {
-  createRealFileTool,
-  readRealFileTool,
-  updateRealFileTool,
-  listRealDirectoryTool,
-  createRealDirectoryTool,
-  allFileTools
-} from './fileTools.js';
 
-// Project analysis tools
-export {
-  analyzeProjectTool,
-  getFileInfoTool,
-  getFileDependenciesTool,
-  getFileDependentsTool,
-  getFolderContentsTool,
-  getProjectOverviewTool,
-  getRelatedFilesTool,
-  findFilesByExportTool,
-  findFilesByImportTool,
-  clearProjectCacheTool,
-  allProjectTools,
-  type ProjectAnalysisResult,
-  type FileInfoResult,
-  type DependencyResult,
-  type FolderContentsResult,
-  type RelatedFilesResult
-} from './projectTools.js';
+import { allFileTools } from "./filesTools.js";
+import { allShellTools } from "./shell.js";
+import { allMemoryTools } from "./memory-tools.js";
+import { allContextTools } from "./context-tools.js";
 
-// OpenAgent context tools
-export {
-  initContextTool,
-  addContextInstructionTool,
-  getProjectContextTool,
-  getPathContextTool,
-  updateContextFileTool,
-  allContextTools,
-  type OpenAgentContextParams,
-  type ContextResult,
-  type ContextError
-} from './openAgentContextTool.js';
+export const allTools = [...allFileTools, ...allShellTools, ...allMemoryTools, ...allContextTools];
 
-// Terminal/execution tools
-export * from './terminal.js';
-
-// Combined tool arrays for easy registration
-import { allFileTools } from './fileTools.js';
-import { allProjectTools } from './projectTools.js';
-import { allContextTools } from './openAgentContextTool.js';
-
-export const allTools = [
-  ...allFileTools,
-  ...allProjectTools,
-  ...allContextTools
-];
-
-// Tool categories for organization
-export const toolCategories = {
-  filesystem: allFileTools,
-  project: allProjectTools,
-  context: allContextTools,
-  all: allTools
-};
+export { allFileTools } from "./filesTools.js";
+export { allShellTools } from "./shell.js";
+export { allMemoryTools } from "./memory-tools.js";
+export { allContextTools } from "./context-tools.js";

@@ -68,8 +68,9 @@ test-report.*
 # Cache
 .cache/
 *.cache
-/.openagent/
+# /.openagent/
 openclaude_dev_prompt.md
 features_to_implment.md
 /ClaudeCode-Docs/
 /langgraph/
+/langgraph-docs/

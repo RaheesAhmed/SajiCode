@@ -1,11 +1,8 @@
 #!/usr/bin/env node
+import "./cli/index.js";
 
 /**
- * Copyright (c) 2025 OpenAgent Team
+ * Copyright (c) 2026 OpenAgent Team
  * Licensed under the MIT License
- *
- * OpenAgent - Main Entry Point
- * The world's most advanced open-source AI development assistant
+ * Main entry point for the OpenAgent CLI
  */
-
-import './cli/index.js';
