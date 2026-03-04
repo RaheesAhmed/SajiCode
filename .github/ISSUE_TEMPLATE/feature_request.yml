@@ -43,7 +43,7 @@ body:
       placeholder: |
         Example usage:
         ```bash
-        openagent --new-feature example
+        sajicode --new-feature example
         ```
       render: markdown
 
@@ -96,7 +96,7 @@ body:
       options:
         - label: I have searched existing issues for similar feature requests
           required: true
-        - label: This feature aligns with OpenAgent's goals
+        - label: This feature aligns with sajicode's goals
           required: true
         - label: I would be willing to help implement this feature
           required: false

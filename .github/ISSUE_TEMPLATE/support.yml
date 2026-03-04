@@ -8,7 +8,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Need help with OpenAgent? Please provide as much detail as possible so we can assist you quickly.
+        Need help with sajicode? Please provide as much detail as possible so we can assist you quickly.
 
   - type: textarea
     id: question
@@ -51,7 +51,7 @@ body:
       value: |
         - OS: [e.g., Windows 11, macOS 13, Ubuntu 22.04]
         - Node.js version: [e.g., 18.17.0]
-        - OpenAgent version: [e.g., v1.0.0]
+        - sajicode version: [e.g., v1.0.0]
         - AI Model: [e.g., claude-sonnet-4-20250514]
     validations:
       required: true

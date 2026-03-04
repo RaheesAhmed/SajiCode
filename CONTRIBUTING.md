@@ -1,6 +1,6 @@
-# Contributing to OpenAgent
+# Contributing to sajicode
 
-Thank you for your interest in contributing to OpenAgent! We welcome contributions from developers of all skill levels.
+Thank you for your interest in contributing to sajicode! We welcome contributions from developers of all skill levels.
 
 ## 🚀 Getting Started
 
@@ -14,8 +14,8 @@ Thank you for your interest in contributing to OpenAgent! We welcome contributio
 ```bash
 # Fork the repository on GitHub
 # Clone your fork
-git clone https://github.com/YOUR-USERNAME/OpenAgent.git
-cd OpenAgent
+git clone https://github.com/YOUR-USERNAME/sajicode.git
+cd sajicode
 
 # Install dependencies
 npm install
@@ -34,7 +34,7 @@ npm run dev
 ## 📋 How to Contribute
 
 ### 1. Find Something to Work On
-- Check [Issues](https://github.com/RaheesAhmed/OpenAgent/issues) for open tasks
+- Check [Issues](https://github.com/RaheesAhmed/sajicode/issues) for open tasks
 - Look for issues labeled `good first issue` or `help wanted`
 - Propose new features by creating an issue first
 
@@ -199,7 +199,7 @@ When reporting bugs, please include:
 1. **Environment Details**
    - Node.js version
    - Operating system
-   - OpenAgent version
+   - sajicode version
 
 2. **Steps to Reproduce**
    - Clear, step-by-step instructions
@@ -256,13 +256,13 @@ When requesting features:
 
 ## ❓ Getting Help
 
-- **Discussions**: Use [GitHub Discussions](https://github.com/RaheesAhmed/OpenAgent/discussions) for questions
-- **Issues**: Report bugs and request features in [Issues](https://github.com/RaheesAhmed/OpenAgent/issues)
+- **Discussions**: Use [GitHub Discussions](https://github.com/RaheesAhmed/sajicode/discussions) for questions
+- **Issues**: Report bugs and request features in [Issues](https://github.com/RaheesAhmed/sajicode/issues)
 
 ## 📜 License
 
-By contributing to OpenAgent, you agree that your contributions will be licensed under the MIT License.
+By contributing to sajicode, you agree that your contributions will be licensed under the MIT License.
 
 ---
 
-Thank you for contributing to OpenAgent! 🙏
+Thank you for contributing to sajicode! 🙏

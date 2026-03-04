@@ -49,8 +49,8 @@ logs
 ehthumbs.db
 Thumbs.db
 
-# OpenAgent specific
-.openagent/
+# sajicode specific
+.sajicode/
 
 # Temporary files
 *.tmp
@@ -68,7 +68,7 @@ test-report.*
 # Cache
 .cache/
 *.cache
-# /.openagent/
+# /.sajicode/
 openclaude_dev_prompt.md
 features_to_implment.md
 /ClaudeCode-Docs/

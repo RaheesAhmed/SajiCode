@@ -35,8 +35,8 @@ jobs:
       run: |
         mkdir release
         cp -r dist package.json README.MD LICENSE CONTRIBUTING.md release/
-        tar -czf openagent-${{ github.ref_name }}.tar.gz -C release .
-        zip -r openagent-${{ github.ref_name }}.zip release/
+        tar -czf sajicode-${{ github.ref_name }}.tar.gz -C release .
+        zip -r sajicode-${{ github.ref_name }}.zip release/
 
     - name: Generate changelog
       id: changelog
@@ -46,7 +46,7 @@ jobs:
         
         if [ -z "$PREVIOUS_TAG" ]; then
           echo "changelog<<EOF" >> $GITHUB_OUTPUT
-          echo "Initial release of OpenAgent" >> $GITHUB_OUTPUT
+          echo "Initial release of sajicode" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
         else
           echo "changelog<<EOF" >> $GITHUB_OUTPUT
@@ -63,9 +63,9 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         tag_name: ${{ github.ref_name }}
-        release_name: OpenAgent ${{ github.ref_name }}
+        release_name: sajicode ${{ github.ref_name }}
         body: |
-          # OpenAgent ${{ github.ref_name }}
+          # sajicode ${{ github.ref_name }}
           
           ${{ steps.changelog.outputs.changelog }}
           
@@ -73,12 +73,12 @@ jobs:
           
           ```bash
           # Download and extract
-          wget https://github.com/RaheesAhmed/OpenAgent/releases/download/${{ github.ref_name }}/openagent-${{ github.ref_name }}.tar.gz
-          tar -xzf openagent-${{ github.ref_name }}.tar.gz
+          wget https://github.com/RaheesAhmed/sajicode/releases/download/${{ github.ref_name }}/sajicode-${{ github.ref_name }}.tar.gz
+          tar -xzf sajicode-${{ github.ref_name }}.tar.gz
           
           # Or clone from source
-          git clone https://github.com/RaheesAhmed/OpenAgent.git
-          cd OpenAgent
+          git clone https://github.com/RaheesAhmed/sajicode.git
+          cd sajicode
           npm install && npm run build
           ```
           
@@ -88,10 +88,10 @@ jobs:
           
           ## Documentation
           
-          - [README](https://github.com/RaheesAhmed/OpenAgent/blob/main/README.MD)
-          - [Contributing Guide](https://github.com/RaheesAhmed/OpenAgent/blob/main/CONTRIBUTING.md)
+          - [README](https://github.com/RaheesAhmed/sajicode/blob/main/README.MD)
+          - [Contributing Guide](https://github.com/RaheesAhmed/sajicode/blob/main/CONTRIBUTING.md)
           
-          **Full Changelog**: https://github.com/RaheesAhmed/OpenAgent/compare/${{ steps.changelog.outputs.previous_tag }}...${{ github.ref_name }}
+          **Full Changelog**: https://github.com/RaheesAhmed/sajicode/compare/${{ steps.changelog.outputs.previous_tag }}...${{ github.ref_name }}
         draft: false
         prerelease: false
 
@@ -101,8 +101,8 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./openagent-${{ github.ref_name }}.tar.gz
-        asset_name: openagent-${{ github.ref_name }}.tar.gz
+        asset_path: ./sajicode-${{ github.ref_name }}.tar.gz
+        asset_name: sajicode-${{ github.ref_name }}.tar.gz
         asset_content_type: application/gzip
 
     - name: Upload ZIP asset
@@ -111,6 +111,6 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./openagent-${{ github.ref_name }}.zip
-        asset_name: openagent-${{ github.ref_name }}.zip
+        asset_path: ./sajicode-${{ github.ref_name }}.zip
+        asset_name: sajicode-${{ github.ref_name }}.zip
         asset_content_type: application/zip
