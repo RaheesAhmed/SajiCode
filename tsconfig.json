@@ -3,7 +3,9 @@
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "bundler",
-    "lib": ["ES2022"],
+    "lib": [
+      "ES2022"
+    ],
     "outDir": "./dist",
     "rootDir": "./src",
     "strict": true,
@@ -31,17 +33,32 @@
     "emitDecoratorMetadata": true,
     "baseUrl": "./src",
     "paths": {
-      "@/*": ["*"],
-      "@core/*": ["core/*"],
-      "@agents/*": ["agents/*"],
-      "@mcp/*": ["mcp/*"],
-      "@cli/*": ["cli/*"],
-      "@utils/*": ["utils/*"],
-      "@types/*": ["types/*"]
+      "@/*": [
+        "*"
+      ],
+      "@core/*": [
+        "core/*"
+      ],
+      "@agents/*": [
+        "agents/*"
+      ],
+      "@mcp/*": [
+        "mcp/*"
+      ],
+      "@cli/*": [
+        "cli/*"
+      ],
+      "@utils/*": [
+        "utils/*"
+      ],
+      "@types/*": [
+        "types/*"
+      ]
     }
   },
   "include": [
-    "src/**/*"
+    "src/**/*",
+    "skills/**/*"
   ],
   "exclude": [
     "node_modules",

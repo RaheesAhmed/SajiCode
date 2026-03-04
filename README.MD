@@ -58,22 +58,23 @@ Current AI coding assistants use a **single agent** to handle everything. This b
 ## Quickstart
 
 ```bash
-git clone https://github.com/raheesahmed/sajicode.git
-cd sajicode
-npm install
-npm run build
+# Install globally via NPM
+npm install -g sajicode
+
+# Or run directly without installing
+npx sajicode
 ```
 
 ### Run with your preferred model
 
 ```bash
 # Local (no API key needed)
-node dist/index.js -p ollama -m llama3.1:70b
+sajicode -p ollama -m llama3.1:70b
 
 # Cloud providers
-node dist/index.js -p openai -m gpt-4.1
-node dist/index.js -p google -m gemini-2.5-flash
-node dist/index.js -p anthropic -m claude-sonnet-4-20250514
+sajicode -p openai -m gpt-4.1
+sajicode -p google -m gemini-2.5-flash
+sajicode -p anthropic -m claude-sonnet-4-20250514
 ```
 
 ### Environment variables
@@ -94,7 +95,7 @@ Send coding tasks from your phone. SajiCode connects directly to WhatsApp — no
 
 ```bash
 # Start SajiCode with WhatsApp channel
-node dist/index.js --channels whatsapp
+sajicode --channels whatsapp
 ```
 
 **First run:** A QR code appears in your terminal. Scan it with WhatsApp (Settings → Linked Devices → Link a Device). Auth is saved globally to `~/.sajicode/whatsapp-auth/` — you only scan once, works across all projects.
@@ -368,7 +369,7 @@ Create `.sajicode/mcp-servers.json`:
 ### CLI Flags
 
 ```bash
-node dist/index.js [options]
+sajicode [options]
 
   -p, --provider <name>    LLM provider (ollama, openai, google, anthropic)
   -m, --model <name>       Model name
@@ -378,10 +379,10 @@ node dist/index.js [options]
 **Examples:**
 ```bash
 # Terminal only (default)
-node dist/index.js -p ollama -m llama3.1:70b
+sajicode -p ollama -m llama3.1:70b
 
 # Terminal + WhatsApp
-node dist/index.js -p openai -m gpt-4.1 --channels whatsapp
+sajicode -p openai -m gpt-4.1 --channels whatsapp
 ```
 
 ---
@@ -440,7 +441,7 @@ npm run build
 **Development workflow:**
 1. Edit TypeScript in `src/`
 2. `npm run build` to compile
-3. `node dist/index.js` to test
+3. `node dist/index.js` to test (or use `npm start`)
 4. Skills go in `skills/<name>/SKILL.md`
 
 We welcome PRs for new skills, LLM provider support, and agent improvements.

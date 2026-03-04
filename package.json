@@ -1,8 +1,12 @@
 {
   "name": "sajicode",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "",
   "main": "dist/index.js",
+  "files": [
+    "dist",
+    "skills"
+  ],
   "type": "module",
   "bin": {
     "sajicode": "dist/index.js"
