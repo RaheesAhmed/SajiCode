@@ -197,10 +197,12 @@ export const leadJudgmentMiddleware = createMiddleware({
   ) => {
     const { name: toolName, args } = request.toolCall;
 
-    // Block leads from writing source code — they must use task() to dispatch sub-agents.
-    // Leads ARE allowed to: write .json (package.json, tsconfig), .md (docs), .yml (configs)
+    // Leads can write SMALL source files directly (< 50 lines).
+    // Large files (>= 50 lines) must be delegated to sub-agents via task().
+    // Leads ARE always allowed to: write .json, .md, .yml, .yaml configs.
     if (toolName === "write_file" || toolName === "edit_file") {
       const filePath = (args["file_path"] ?? args["path"] ?? "") as string;
+      const content = (args["content"] ?? args["new_str"] ?? "") as string;
       const SOURCE_EXTENSIONS = new Set([
         ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs",
         ".py", ".go", ".rs", ".java", ".rb", ".php",
@@ -209,23 +211,24 @@ export const leadJudgmentMiddleware = createMiddleware({
       const ext = filePath.substring(filePath.lastIndexOf(".")).toLowerCase();
 
       if (SOURCE_EXTENSIONS.has(ext)) {
-        const msg = `[LEAD BLOCKED] You cannot write source code files directly. You are a LEAD — your job is to ORCHESTRATE.
+        const lineCount = typeof content === "string" ? content.split("\n").length : 0;
+        const SMALL_FILE_THRESHOLD = 50;
 
-File attempted: "${filePath}"
+        if (lineCount >= SMALL_FILE_THRESHOLD) {
+          const msg = `[LEAD BLOCKED] File "${filePath}" has ${lineCount} lines (>= ${SMALL_FILE_THRESHOLD}).
 
-YOUR WORKFLOW:
-1. Create folder structure: execute("mkdir -p src/routes src/services ...")
-2. Dispatch sub-agents in parallel via multiple task() calls in ONE response.
-   Each sub-agent gets a clearly scoped task with specific files to create.
+Large source files must be delegated to sub-agents via task().
+You CAN write files under ${SMALL_FILE_THRESHOLD} lines directly (index files, configs, utilities).
 
 Dispatch NOW using task(subagent_type="<sub-agent-name>", ...).`;
-        console.log(chalk.red(`  ✗ LEAD BLOCKED: ${filePath} — must dispatch to sub-agent`));
-        return new ToolMessage({
-          name: toolName,
-          content: msg,
-          tool_call_id: (request.toolCall as any).id || "unknown",
-          status: "error",
-        });
+          console.log(chalk.red(`  ✗ LEAD BLOCKED: ${filePath} (${lineCount} lines) — must dispatch to sub-agent`));
+          return new ToolMessage({
+            name: toolName,
+            content: msg,
+            tool_call_id: (request.toolCall as any).id || "unknown",
+            status: "error",
+          });
+        }
       }
     }
 

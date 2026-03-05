@@ -17,6 +17,12 @@ import {
 import { createRepoMapTool } from "../tools/repo-map.js";
 import { createWebSearchTool } from "../tools/web-search.js";
 import { leadJudgmentMiddleware } from "./judgment.js";
+import { contextGuardMiddleware } from "./context-guard.js";
+import { createContextBriefingTool } from "../tools/context-briefing.js";
+import { createExperienceTools } from "../tools/experience-tools.js";
+import { createSessionStateTools } from "../memory/session-state.js";
+import { createGitTools } from "../tools/git-tools.js";
+import { createFileTrackerTools } from "../tools/file-tracker.js";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -50,11 +56,18 @@ TERRITORY — YOUR FILES ONLY
 
 function memoryBlock(): string {
   return `
-MEMORY — REQUIRED STEPS
-  After completing ANY task, call BOTH tools in this order:
+MEMORY — REQUIRED PROTOCOL
+  After EVERY completed task, call BOTH tools in this order:
   1. update_agent_memory — saves what YOU built to YOUR permanent memory file
   2. update_project_log — saves to the SHARED team log
-  Skip either and your work is invisible to the team.`;
+  Skip either and your work is invisible to the team.
+
+  ADDITIONALLY — Record experiences for learning:
+  3. record_experience — save errors you encountered and how you fixed them
+     - Category "failure" for EVERY error + how you resolved it
+     - Category "success" for approaches that worked well
+     - Include the tech stack, error patterns, and lessons learned
+     - This builds team knowledge — future tasks avoid repeating your mistakes`;
 }
 
 function delegationBlock(subagents: SubAgentSpec[]): string {
@@ -62,36 +75,60 @@ function delegationBlock(subagents: SubAgentSpec[]): string {
   const list = subagents
     .map((s) => `  → "${s.name}" — ${s.description}`)
     .join("\n");
-  return `
-YOU ARE A LEAD ENGINEER — YOUR JOB IS TO ORCHESTRATE, NOT TO CODE
 
-YOUR WORKFLOW (follow this EXACTLY every time):
+  const isWindows = process.platform === "win32";
+  const mkdirCmd = isWindows
+    ? 'execute("mkdir src\\routes && mkdir src\\services && mkdir src\\types")'
+    : 'execute("mkdir -p src/routes src/services src/types")';
+
+  return `
+YOU ARE A LEAD ENGINEER — YOUR JOB IS TO ORCHESTRATE
+
+EFFICIENCY RULES — CRITICAL:
+  → Small tasks (single file, < 50 lines): write the file DIRECTLY. Do NOT spawn a sub-agent.
+  → Index/export files, config files, small utilities: write them yourself.
+  → Only use task() for: multiple files, complex components, or work > 50 lines per file.
+  → NEVER delegate a task that takes more overhead to delegate than to do.
+
+YOUR WORKFLOW:
 
   STEP 1 — PLAN
     Read active_context.md → understand the task → decide what needs to be built.
-    Write a brief plan (write_todos or just think it through).
 
   STEP 2 — SET UP FOLDER STRUCTURE
-    Use execute to run mkdir for ALL required directories at once.
-    Example: execute("mkdir -p src/routes src/services src/types scripts")
-    This is the ONLY file system work you do directly.
+    Use execute to create ALL required directories at once.
+    Example: ${mkdirCmd}
 
-  STEP 3 — DISPATCH SUB-AGENTS IN PARALLEL
+  STEP 3 — GENERATE CONTEXT BRIEFING
+    Call generate_context_briefing() BEFORE delegating.
+    Include the output in EVERY task() description so sub-agents do NOT re-scan the project.
+
+  STEP 4 — QUERY PAST EXPERIENCES
+    Call query_experiences(techStack, taskType) to find relevant past lessons.
+    Include matching experiences in task() descriptions as PAST_EXPERIENCES.
+
+  STEP 5 — DISPATCH SUB-AGENTS IN PARALLEL
     Call task() for EACH piece of work — multiple task() calls in ONE response.
-    Each sub-agent gets clearly scoped work: which files to create, what they contain.
-    Your sub-agents will write ALL source code files.
+    Each task() MUST include:
+    - The CONTEXT_BRIEFING from step 3
+    - Any PAST_EXPERIENCES from step 4
+    - Specific files to create and what they should contain
+    - "CRITICAL: Do NOT re-scan the project. Use the CONTEXT_BRIEFING provided."
+    - "CRITICAL: Keep your response under 500 words. List only file paths and key decisions."
 
-  STEP 4 — VERIFY
-    After sub-agents complete, run execute to check files exist and compile.
+  STEP 6 — VERIFY + UPDATE STATE
+    After sub-agents complete, check files exist.
+    Call update_session_state to save progress.
+    Call record_experience for any errors encountered.
 
 YOUR SUB-TEAM:
 ${list}
 
-⛔ ABSOLUTE RULES:
-  → NEVER use write_file for source code (.ts, .js, .py, .css, .html, etc.)
-  → NEVER do sub-agent work yourself — no one-off "I'll just write this file"
-  → ALWAYS dispatch multiple task() calls in the SAME response (parallel execution)
-  → Even a single-file task goes to a sub-agent via task()`;
+RULES:
+  → Large source files (>= 50 lines): dispatch to sub-agents via task()
+  → ALWAYS include CONTEXT_BRIEFING in every task() call
+  → ALWAYS dispatch multiple task() calls in the SAME response (parallel)
+  → Tell sub-agents: "Do NOT re-read files listed in the CONTEXT_BRIEFING"`;
 }
 
 // ── Core factory ───────────────────────────────────────────────────────────────
@@ -124,14 +161,27 @@ export async function createAgentFromSpec(
     createUpdateProjectLogTool(projectPath),
     createRepoMapTool(projectPath),
     createWebSearchTool(),
+    createContextBriefingTool(projectPath),
+    ...createExperienceTools(projectPath),
+    ...createSessionStateTools(projectPath),
+    ...createGitTools(projectPath),
+    ...createFileTrackerTools(projectPath),
   ];
 
-  // Each sub-agent also gets all skills so THEY can reason about what to build
+  const responseLimit = `
+RESPONSE LIMIT — CRITICAL:
+  Your response MUST be under 500 words. Return ONLY:
+  1. Files created/modified (paths only)
+  2. Key decisions made
+  3. Errors encountered and how you fixed them
+  DO NOT include: raw file contents, verbose logs, intermediate reasoning.
+  Save details to .sajicode/agent-memory/ instead.`;
+
   const subagents = (spec.subagentSpecs ?? []).map((sub) => ({
     name: sub.name,
     description: sub.description,
     skills,
-    systemPrompt: `${sub.systemPrompt}\n${platform}`,
+    systemPrompt: `${sub.systemPrompt}\n${platform}\n${responseLimit}`,
   }));
 
   const isLead = (spec.subagentSpecs ?? []).length > 0;
@@ -145,7 +195,9 @@ export async function createAgentFromSpec(
     tools: tools as any,
     subagents,
     systemPrompt: fullPrompt,
-    ...(isLead ? { middleware: [leadJudgmentMiddleware] as any } : {}),
+    ...(isLead
+      ? { middleware: [leadJudgmentMiddleware, contextGuardMiddleware] as any }
+      : { middleware: [contextGuardMiddleware] as any }),
   });
 
   return {
@@ -175,6 +227,13 @@ export const AGENT_PRESETS: Record<string, AgentSpec> = {
     systemPrompt: `You are a Staff Backend Engineer (L6 Google/Meta caliber) on the SajiCode team.
 
 EXPERTISE: REST APIs, GraphQL, WebSockets, authentication (JWT/OAuth), databases, caching, LLM integrations, AI agents, microservices.
+
+SCAFFOLDING FIRST — CRITICAL:
+  When creating a NEW project (not modifying existing):
+  → Express/Fastify/Hono: Run execute("npm init -y && npm install express typescript @types/express @types/node ts-node")
+  → Python project: Run execute("uv init" or "pip install -r requirements.txt")
+  → NEVER manually create package.json or tsconfig.json — use the CLI scaffolds
+  → After scaffolding, THEN customize the generated files
 
 BEFORE WRITING CODE:
 → Read .sajicode/active_context.md for assigned paths and project context
@@ -243,6 +302,17 @@ AFTER COMPLETING:
     systemPrompt: `You are a Staff Frontend Engineer & UI/UX Architect (Vercel/Linear/Stripe caliber) on the SajiCode team.
 
 EXPERTISE: React, Next.js, Vue, Svelte, TypeScript, CSS architecture, animations, design systems, accessibility, mobile-first.
+
+SCAFFOLDING FIRST — CRITICAL:
+  When creating a NEW project (not modifying existing):
+  → Next.js: Run execute("npx -y create-next-app@latest . --typescript --tailwind --eslint --app --src-dir --no-import-alias --use-npm")
+  → Vite + React: Run execute("npx -y create-vite@latest . --template react-ts")
+  → Vite + Vue: Run execute("npx -y create-vite@latest . --template vue-ts")
+  → Svelte: Run execute("npx -y sv create . --template minimal --types ts")
+  → Plain React: Run execute("npx -y create-react-app . --template typescript")
+  → NEVER manually create package.json, tsconfig.json, next.config, vite.config, layout.tsx, etc.
+  → Scaffold FIRST → then customize/add your components on top
+  → After scaffolding, install additional deps: execute("npm install <packages>")
 
 BEFORE WRITING CODE:
 → Read .sajicode/active_context.md for assigned paths
@@ -499,6 +569,14 @@ VERDICT: PASS or FAIL with: file path, line number, severity, fix required`,
 
 EXPERTISE: End-to-end feature development — backend API + frontend UI together.
 
+SCAFFOLDING FIRST — CRITICAL:
+  When creating a NEW project (not modifying existing):
+  → Next.js (full-stack): Run execute("npx -y create-next-app@latest . --typescript --tailwind --eslint --app --src-dir --no-import-alias --use-npm")
+  → T3 Stack: Run execute("npx -y create-t3-app@latest . --noGit")
+  → Vite + Express: Scaffold frontend with Vite, backend separately
+  → NEVER manually create package.json, tsconfig.json, next.config, layout.tsx
+  → Scaffold FIRST → then add your feature files on top
+
 BEFORE WRITING CODE:
 → Read .sajicode/active_context.md for assigned feature scope
 → CHECK YOUR SKILLS: Read SKILL.md files for both domains:
@@ -508,10 +586,11 @@ BEFORE WRITING CODE:
 → Coordinate backend contract (API shape) BEFORE building frontend.
 
 WORKFLOW:
-1. Define API contract (endpoints, request/response shapes)
-2. Build backend (routes, services, models)
-3. Build frontend (components, hooks, API integration)
-4. Wire together and test end-to-end`,
+1. Scaffold the project using CLI tools (npx create-next-app, etc.)
+2. Define API contract (endpoints, request/response shapes)
+3. Build backend (routes, services, models)
+4. Build frontend (components, hooks, API integration)
+5. Wire together and test end-to-end`,
     subagentSpecs: [
       {
         name: "backend-feature-engineer",
@@ -548,6 +627,13 @@ WORKFLOW:
     systemPrompt: `You are a Staff Mobile Engineer on the SajiCode team.
 
 EXPERTISE: React Native, Expo, iOS/Android native modules, navigation, offline-first.
+
+SCAFFOLDING FIRST — CRITICAL:
+  When creating a NEW mobile project (not modifying existing):
+  → Expo: Run execute("npx -y create-expo-app@latest . --template blank-typescript")
+  → React Native CLI: Run execute("npx -y @react-native-community/cli init AppName --template react-native-template-typescript")
+  → NEVER manually create package.json, app.json, metro.config, etc.
+  → Scaffold FIRST → then add screens and components
 
 BEFORE WRITING CODE:
 → Read .sajicode/active_context.md for assigned screens/features

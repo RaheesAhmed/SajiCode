@@ -8,7 +8,11 @@ export class SafeShellBackend extends LocalShellBackend {
   private stateLoaded = false;
 
   constructor(options: LocalShellBackendOptions & { projectPath: string }) {
-    super(options);
+    super({
+      ...options,
+      timeout: options.timeout ?? 300,
+      inheritEnv: true,
+    });
     this.stateManager = new ProcessStateManager(options.projectPath);
   }
 

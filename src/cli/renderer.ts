@@ -174,6 +174,17 @@ export class StreamRenderer {
       update_agent_memory: ["🧠", "Saving memory..."],
       update_project_log: ["📒", "Updating log..."],
       tavily_search_results_json: ["🌐", "Searching web..."],
+      git_status: ["📊", "Checking git..."],
+      git_commit: ["💾", "Committing..."],
+      git_branch: ["🌿", "Creating branch..."],
+      git_diff: ["📋", "Checking diff..."],
+      git_checkpoint: ["📌", "Checkpointing..."],
+      snapshot_file: ["📸", "Snapshotting..."],
+      undo_file_change: ["⏪", "Undoing change..."],
+      list_snapshots: ["📸", "Listing snapshots..."],
+      generate_context_briefing: ["📑", "Generating briefing..."],
+      record_experience: ["📚", "Recording experience..."],
+      query_experiences: ["🔎", "Querying experiences..."],
     };
 
     const [emoji, label] = toolLabels[toolName] ?? ["⚡", `${toolName}...`];
@@ -416,9 +427,19 @@ export class StreamRenderer {
   }
 
   private onCustom(data: any): void {
-    if (data?.status) {
+    if (!data) return;
+
+    if (data.type === "agent_progress") {
+      const { agent, phase, detail } = data;
+      const icon = agent ? this.agentIcon(agent) : GY("●");
+      const label = agent ? this.subAgentLabel(agent) : "System";
+      console.log(`  ${icon} ${DIM(label)} ${GY("▸")} ${CY(phase ?? "")} ${GY(detail ?? "")}`);
+      return;
+    }
+
+    if (data.status) {
       this.flushBuffer();
-      console.log(GY(`  ${data.status}`));
+      console.log(GY(`  ● ${data.status}`));
     }
   }
 
@@ -687,8 +708,29 @@ export class StreamRenderer {
       return;
     }
 
+    if (toolName.startsWith("git_") || toolName === "snapshot_file" || toolName === "undo_file_change" || toolName === "list_snapshots") {
+      this.renderGitResult(toolName, content);
+      return;
+    }
+
     if (content.length > 0 && content.length <= 100) {
       console.log(`    ${G("✓")} ${GY(content)}`);
+    }
+  }
+
+  private renderGitResult(toolName: string, content: string): void {
+    const lines = content.split("\n").slice(0, 8);
+    const icons: Record<string, string> = {
+      git_commit: "💾",
+      git_branch: "🌿",
+      git_checkpoint: "📌",
+      git_status: "📊",
+      git_diff: "📋",
+    };
+    const icon = icons[toolName] ?? "📦";
+    console.log(`    ${G("✓")} ${CY(icon)} ${GY(lines[0] ?? "done")}`);
+    for (const line of lines.slice(1)) {
+      if (line.trim()) console.log(`    ${GY("  ")}${GY(line)}`);
     }
   }
 
@@ -784,6 +826,14 @@ export class StreamRenderer {
           const icon = this.agentIcon(agent.name);
           const label = this.subAgentLabel(agent.name);
           console.log(`  ${icon} ${G(`${label} ✓ Done`)}`);
+
+          const total = this.agents.size;
+          const done = [...this.agents.values()].filter((a) => a.status === "done").length;
+          const working = [...this.agents.values()].filter((a) => a.status === "working").length;
+          if (total > 1) {
+            const bar = G("█".repeat(done)) + YL("░".repeat(total - done));
+            console.log(`  ${GY("  Progress:")} ${bar} ${GY(`${done}/${total} agents`)} ${working > 0 ? YL(`(${working} active)`) : ""}`);
+          }
           console.log("");
         }
       }

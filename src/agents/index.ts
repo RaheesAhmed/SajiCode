@@ -12,6 +12,12 @@ import { createAllDomainHeads } from "./domain-heads.js";
 import { createModel } from "../llms/provider.js";
 import { getAllSkillPaths } from "../utils/skills.js";
 import { MCPClientManager } from "../mcp/MCPClient.js";
+import { createContextBriefingTool } from "../tools/context-briefing.js";
+import { createExperienceTools } from "../tools/experience-tools.js";
+import { createSessionStateTools } from "../memory/session-state.js";
+import { contextGuardMiddleware } from "./context-guard.js";
+import { createGitTools } from "../tools/git-tools.js";
+import { createFileTrackerTools } from "../tools/file-tracker.js";
 
 function buildInterruptOn(
   hitl: HumanInTheLoopConfig | undefined
@@ -65,14 +71,28 @@ export async function createSajiCode(
   const domainHeads = await createAllDomainHeads(model, config.projectPath);
   const interruptOn = buildInterruptOn(config.humanInTheLoop);
 
+  const contextBriefingTool = createContextBriefingTool(config.projectPath);
+  const experienceTools = createExperienceTools(config.projectPath);
+  const sessionStateTools = createSessionStateTools(config.projectPath);
+
   const agent = await createDeepAgent({
     name: "pm-agent",
     model,
     systemPrompt: fullSystemPrompt,
     backend,
-    tools: [...contextTools, repoMapTool, createWebSearchTool(), ...mcpTools] as any,
+    tools: [
+      ...contextTools,
+      repoMapTool,
+      createWebSearchTool(),
+      contextBriefingTool,
+      ...experienceTools,
+      ...sessionStateTools,
+      ...mcpTools,
+      ...createGitTools(config.projectPath),
+      ...createFileTrackerTools(config.projectPath),
+    ] as any,
     subagents: domainHeads as any,
-    middleware: [judgmentMiddleware] as any,
+    middleware: [judgmentMiddleware, contextGuardMiddleware] as any,
     checkpointer,
     skills: getAllSkillPaths() as any,
     ...(interruptOn ? { interruptOn } : {}),

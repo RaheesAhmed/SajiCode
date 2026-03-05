@@ -5,7 +5,17 @@ const AGENTS_DIR = ".sajicode/agents";
 
 export interface MemoryEntry {
   timestamp: string;
-  category: "decision" | "contract" | "blocker" | "architecture" | "progress" | "user_preference";
+  category:
+    | "decision"
+    | "contract"
+    | "blocker"
+    | "architecture"
+    | "progress"
+    | "user_preference"
+    | "error_pattern"
+    | "success_pattern"
+    | "platform_quirk"
+    | "dependency_note";
   content: string;
   tags: string[];
 }
@@ -62,7 +72,9 @@ function formatMemoryForPrompt(memory: AgentMemoryFile, agentName: string): stri
   ];
 
   const categoryOrder: MemoryEntry["category"][] = [
-    "architecture", "decision", "contract", "progress", "blocker", "user_preference",
+    "architecture", "decision", "contract", "error_pattern",
+    "success_pattern", "platform_quirk", "dependency_note",
+    "progress", "blocker", "user_preference",
   ];
 
   for (const cat of categoryOrder) {
