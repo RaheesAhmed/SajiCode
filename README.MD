@@ -77,6 +77,11 @@ sajicode -p google -m gemini-2.5-flash
 sajicode -p anthropic -m claude-sonnet-4-20250514
 ```
 
+# Headless mode for CI/CD pipeline
+```
+sajicode build "Fix the login bug and write tests" --headless
+```
+
 ### Environment variables
 
 ```bash
@@ -292,6 +297,17 @@ The `collect_repo_map` tool scans your entire project and extracts function/clas
 
 Every agent's memory persists across sessions. When you start a new thread, agents remember what they built before, what contracts they established with other agents, and your preferences.
 
+### Headless & CI/CD Mode
+
+SajiCode isn't just an interactive CLI—it's designed to run completely unattended in your deployment pipelines. Using the `--headless` flag, you can trigger agents to write tests, review code, or audit security vulnerabilities automatically within GitHub Actions or your preferred CI. Pre and post-action hooks allow you to customize these agent workflows deeply into your existing build systems.
+
+### Advanced Engineering Capabilities
+
+- **Intelligent Version Control**: Full suite of git tools (commit, branch, diff, checkpoint) wired directly into the PM and domain leads. Combined with built-in file snapshot and undo tracking, agents can checkpoint progress and revert mistakes automatically.
+- **Enterprise-Grade Memory**: Advanced `CompositeBackend` persistent memory architecture spans multiple sessions and storage layers. This is fortified by a Summarization Middleware that actively condenses context to prevent LLM window collapse during long tasks.
+- **Optimized Execution Engine**: A real-time streaming progress dashboard gives you full visibility into all 17 agents. Sub-agents are optimized with strict response limits (500 words max) and enhanced context briefing delegation to guarantee agile, concise outputs.
+- **TDD-First Architecture**: Test-Driven Development is baked natively into the QA and domain leads' workflow, ensuring every newly generated feature or module is backed by comprehensive testing before completion.
+
 ### 21 Expert Skills
 
 Skills are modular knowledge files following the [Agent Skills specification](https://agentskills.io). Agents read them on-demand via progressive disclosure — loading only what's needed for the current task.
@@ -362,6 +378,8 @@ Create `.sajicode/mcp-servers.json`:
 |:---|:---|
 | `/init` | Scans project and generates `SAJICODE.md` context file |
 | `/status` | Shows session info — thread, model, context, HITL status |
+| `/undo <file>` | Undoes the last file change made by an agent and restores from snapshot |
+| `/snapshots` | Lists recent file snapshots taken by agents |
 | `/help` | Lists all available commands |
 | `/clear` | Clears the terminal |
 | `/exit` | Gracefully shuts down all agents and MCP connections |
@@ -374,6 +392,7 @@ sajicode [options]
   -p, --provider <name>    LLM provider (ollama, openai, google, anthropic)
   -m, --model <name>       Model name
   -c, --channels <list>    Comma-separated channels to start (whatsapp)
+  -H, --headless           Run in headless mode (no UI, ideal for CI/CD)
 ```
 
 **Examples:**
@@ -383,6 +402,9 @@ sajicode -p ollama -m llama3.1:70b
 
 # Terminal + WhatsApp
 sajicode -p openai -m gpt-4.1 --channels whatsapp
+
+# Headless mode for CI/CD pipeline
+sajicode build "Fix the login bug and write tests" --headless
 ```
 
 ---

@@ -19,7 +19,7 @@ async function ensureSnapshotDir(projectPath: string): Promise<string> {
   return dir;
 }
 
-async function getSnapshotIndex(projectPath: string): Promise<FileSnapshot[]> {
+export async function getSnapshotIndex(projectPath: string): Promise<FileSnapshot[]> {
   const indexPath = path.join(projectPath, SNAPSHOT_DIR, "index.json");
   try {
     const data = await fs.readFile(indexPath, "utf-8");
@@ -29,13 +29,59 @@ async function getSnapshotIndex(projectPath: string): Promise<FileSnapshot[]> {
   }
 }
 
-async function saveSnapshotIndex(
+export async function saveSnapshotIndex(
   projectPath: string,
   snapshots: FileSnapshot[],
 ): Promise<void> {
   const indexPath = path.join(projectPath, SNAPSHOT_DIR, "index.json");
   const trimmed = snapshots.slice(-MAX_SNAPSHOTS);
   await fs.writeFile(indexPath, JSON.stringify(trimmed, null, 2));
+}
+
+export async function undoFileChange(projectPath: string, filePath: string): Promise<string> {
+  const index = await getSnapshotIndex(projectPath);
+  const matching = index.filter((s) => s.filePath === filePath);
+
+  if (matching.length === 0) {
+    return `No snapshots found for ${filePath}. Cannot undo.`;
+  }
+
+  const latest = matching[matching.length - 1]!;
+  const snapshotPath = path.join(projectPath, SNAPSHOT_DIR, latest.content);
+
+  let originalContent: string;
+  try {
+    originalContent = await fs.readFile(snapshotPath, "utf-8");
+  } catch {
+    return `Snapshot file missing: ${latest.content}. Cannot undo.`;
+  }
+
+  const absPath = path.isAbsolute(filePath)
+    ? filePath
+    : path.join(projectPath, filePath);
+
+  await fs.writeFile(absPath, originalContent);
+
+  const updated = index.filter((s) => s !== latest);
+  await saveSnapshotIndex(projectPath, updated);
+
+  return `✅ Restored ${filePath} to snapshot from ${new Date(latest.timestamp).toLocaleTimeString()} (by ${latest.agentName})`;
+}
+
+export async function listRecentSnapshots(projectPath: string): Promise<string> {
+  const index = await getSnapshotIndex(projectPath);
+  if (index.length === 0) return "No file snapshots recorded.";
+
+  const lines = index.slice(-20).map((s) => {
+    const time = new Date(s.timestamp).toLocaleTimeString();
+    return `  ${time} | ${s.agentName.padEnd(20)} | ${s.filePath}`;
+  });
+
+  return [
+    `File Snapshots (${index.length} total, showing last 20):`,
+    "",
+    ...lines,
+  ].join("\n");
 }
 
 export function createFileTrackerTools(projectPath: string) {

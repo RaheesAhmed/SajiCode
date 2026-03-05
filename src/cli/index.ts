@@ -6,6 +6,7 @@ import { loadConfig, saveConfig, ensureProjectDir } from "../config/index.js";
 import { createSajiCode, runOnboarding } from "../agents/index.js";
 import { generateThreadId } from "../memory/index.js";
 import { StreamRenderer } from "./renderer.js";
+import { undoFileChange, listRecentSnapshots } from "../tools/file-tracker.js";
 
 const ORANGE = chalk.hex("#FF8C00");
 const program = new Command();
@@ -178,6 +179,35 @@ program
       renderer.printComplete();
     } catch (error) {
       renderer.printError(error instanceof Error ? error : new Error(String(error)));
+      process.exit(1);
+    }
+  });
+
+program
+  .command("undo")
+  .description("Undo the last file change made by an agent")
+  .argument("<file>", "Path to the file to restore")
+  .action(async (file: string) => {
+    const projectPath = process.cwd();
+    try {
+      const result = await undoFileChange(projectPath, file);
+      console.log(result.includes("✅") ? chalk.green(result) : chalk.yellow(result));
+    } catch (error) {
+      console.error(chalk.red("❌ Failed to undo:"), error);
+      process.exit(1);
+    }
+  });
+
+program
+  .command("snapshots")
+  .description("List recent file snapshots taken by agents")
+  .action(async () => {
+    const projectPath = process.cwd();
+    try {
+      const result = await listRecentSnapshots(projectPath);
+      console.log(chalk.cyan(result));
+    } catch (error) {
+      console.error(chalk.red("❌ Failed to list snapshots:"), error);
       process.exit(1);
     }
   });
