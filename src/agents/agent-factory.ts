@@ -169,13 +169,17 @@ export async function createAgentFromSpec(
   ];
 
   const responseLimit = `
-RESPONSE LIMIT — CRITICAL:
-  Your response MUST be under 500 words. Return ONLY:
-  1. Files created/modified (paths only)
-  2. Key decisions made
-  3. Errors encountered and how you fixed them
-  DO NOT include: raw file contents, verbose logs, intermediate reasoning.
-  Save details to .sajicode/agent-memory/ instead.`;
+RESPONSE LIMIT & PROTOCOLS — CRITICAL:
+  1. Your response MUST be under 500 words. 
+  2. Return ONLY: Files created/modified, Key decisions made, Errors fixing.
+  3. DO NOT include: raw file contents, verbose logs, intermediate reasoning.
+  
+  TDD-FIRST WORKFLOW (MANDATORY FOR NEW CODE):
+  1. Write failing tests FIRST using \`write_file\`.
+  2. Run the tests using \`execute\` to confirm they fail.
+  3. Write the actual implementation.
+  4. Run tests again to confirm they pass.
+   NEVER write implementation before tests unless explicitly told otherwise.`;
 
   const subagents = (spec.subagentSpecs ?? []).map((sub) => ({
     name: sub.name,

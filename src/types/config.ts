@@ -13,6 +13,7 @@ export interface ProjectConfig {
   riskTolerance: RiskTolerance;
   humanInTheLoop?: HumanInTheLoopConfig;
   whatsapp?: WhatsAppConfig;
+  hooks?: HooksConfig;
 }
 
 export type ExperienceLevel = "beginner" | "intermediate" | "expert";
@@ -54,6 +55,12 @@ export interface WhatsAppConfig {
   enabled: boolean;
   mode: WhatsAppMode;
   personalBotPrompt?: string;
+}
+
+export interface HooksConfig {
+  preTask?: string;
+  postTask?: string;
+  onExit?: string;
 }
 
 export enum AgentRole {

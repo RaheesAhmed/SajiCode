@@ -21,7 +21,8 @@ program
   .argument("[prompt...]", "What to build")
   .option("-m, --model <model>", "Ollama model to use", "minimax-m2.5:cloud")
   .option("-p, --path <path>", "Project directory", process.cwd())
-  .action(async (promptParts: string[], options: { model: string; path: string }) => {
+  .option("-H, --headless", "Run in headless mode (no UI, ideal for CI/CD)", false)
+  .action(async (promptParts: string[], options: { model: string; path: string; headless: boolean }) => {
     const projectPath = options.path;
     const userPrompt = promptParts.join(" ").trim() || undefined;
 
@@ -33,12 +34,12 @@ program
         config.modelConfig.modelName = options.model;
       }
 
-      const renderer = new StreamRenderer();
-      renderer.printHeader();
+      const renderer = new StreamRenderer(options.headless);
+      if (!options.headless) renderer.printHeader();
 
-      const onboardingResult = await runOnboarding(userPrompt);
+      const onboardingResult = await runOnboarding(userPrompt, options.headless);
 
-      renderer.printTeamAssembled();
+      if (!options.headless) renderer.printTeamAssembled();
       renderer.startSpinner("PM Agent is planning milestones...");
 
       const threadId = generateThreadId();
@@ -68,9 +69,9 @@ program
       );
 
       await renderer.processMultiStream(stream as any);
-      renderer.printComplete();
+      if (!options.headless) renderer.printComplete();
     } catch (error) {
-      const renderer = new StreamRenderer();
+      const renderer = new StreamRenderer(options.headless);
       renderer.printError(error instanceof Error ? error : new Error(String(error)));
       process.exit(1);
     }

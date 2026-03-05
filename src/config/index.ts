@@ -38,6 +38,7 @@ export function getDefaultConfig(projectPath: string): ProjectConfig {
     riskTolerance: "medium",
     humanInTheLoop: { ...DEFAULT_HUMAN_IN_THE_LOOP },
     whatsapp: { enabled: false, mode: "admin" },
+    hooks: {},
   };
 }
 
@@ -52,6 +53,7 @@ export async function loadConfig(projectPath: string): Promise<ProjectConfig> {
       riskTolerance: RiskTolerance;
       humanInTheLoop: Partial<HumanInTheLoopConfig>;
       whatsapp: Partial<WhatsAppConfig>;
+      hooks: Partial<import("../types/index.js").HooksConfig>;
     }>;
 
     return {
@@ -75,6 +77,10 @@ export async function loadConfig(projectPath: string): Promise<ProjectConfig> {
         ...defaults.whatsapp!,
         ...(fileConfig.whatsapp ?? {}),
       },
+      hooks: {
+        ...defaults.hooks,
+        ...(fileConfig.hooks ?? {}),
+      },
     };
   } catch {
     // No config file — write the default so user can see/edit it
@@ -96,6 +102,7 @@ async function ensureDefaultConfig(
       riskTolerance: config.riskTolerance,
       humanInTheLoop: config.humanInTheLoop,
       whatsapp: config.whatsapp,
+      hooks: config.hooks,
     };
     await fs.writeFile(configPath, JSON.stringify(serializable, null, 2), "utf-8");
   } catch {
@@ -114,6 +121,7 @@ export async function saveConfig(config: ProjectConfig): Promise<void> {
     riskTolerance: config.riskTolerance,
     humanInTheLoop: config.humanInTheLoop,
     whatsapp: config.whatsapp,
+    hooks: config.hooks,
   };
 
   await fs.writeFile(configPath, JSON.stringify(serializable, null, 2), "utf-8");

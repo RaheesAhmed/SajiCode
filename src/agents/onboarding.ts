@@ -2,10 +2,23 @@ import { select, input } from "@inquirer/prompts";
 import chalk from "chalk";
 import type { OnboardingResult, ExperienceLevel, StackPreferences } from "../types/index.js";
 
-export async function runOnboarding(userPrompt?: string): Promise<OnboardingResult> {
-  console.log(chalk.hex("#FF8C00").bold("\n🤖 SajiCode — AI Engineering Team"));
-  console.log(chalk.hex("#FF8C00")("━".repeat(42)));
-  console.log(chalk.gray("\n📋 Onboarding Agent\n"));
+export async function runOnboarding(userPrompt?: string, headless: boolean = false): Promise<OnboardingResult> {
+  if (!headless) {
+    console.log(chalk.hex("#FF8C00").bold("\n🤖 SajiCode — AI Engineering Team"));
+    console.log(chalk.hex("#FF8C00")("━".repeat(42)));
+    console.log(chalk.gray("\n📋 Onboarding Agent\n"));
+  }
+
+  if (headless) {
+    const desc = userPrompt ?? "Execute automated task";
+    return {
+      experienceLevel: "expert",
+      projectDescription: desc,
+      projectType: inferProjectType(desc),
+      features: extractFeatures(desc),
+      stackPreferences: {},
+    };
+  }
 
   const experienceLevel = await select<ExperienceLevel>({
     message: "What is your experience level?",

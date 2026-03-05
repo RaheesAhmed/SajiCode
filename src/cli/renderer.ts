@@ -52,6 +52,8 @@ export class StreamRenderer {
   private thinkingSpinner: Ora | null = null;
   private receivedFirstToken = false;
 
+  constructor(private readonly isHeadless: boolean = false) {}
+
   printHeader(): void {
     const p = chalk.hex("#FF6A00"); // SajiOrange
     const w = chalk.hex("#FFFFFF"); // White
@@ -119,6 +121,10 @@ export class StreamRenderer {
   }
 
   startSpinner(text: string): void {
+    if (this.isHeadless) {
+      console.log(`  ${GY("▸")} ${GY(text)}`);
+      return;
+    }
     this.mainSpinner = ora({
       text: GY(text),
       color: "yellow",
@@ -128,6 +134,7 @@ export class StreamRenderer {
   }
 
   stopSpinner(text?: string): void {
+    if (this.isHeadless) return;
     if (this.mainSpinner) {
       if (text) {
         this.mainSpinner.succeed(GY(text));
@@ -139,6 +146,7 @@ export class StreamRenderer {
   }
 
   private startToolSpinner(text: string): void {
+    if (this.isHeadless) return;
     this.stopToolSpinner();
     this.toolSpinner = ora({
       text: GY(text),

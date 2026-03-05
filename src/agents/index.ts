@@ -1,6 +1,7 @@
-import { createDeepAgent } from "deepagents";
+import { createDeepAgent, CompositeBackend, StoreBackend } from "deepagents";
 import { SafeShellBackend } from "../tools/shell-wrapper.js";
 import { MemorySaver } from "@langchain/langgraph";
+import { InMemoryStore } from "@langchain/langgraph-checkpoint";
 import type { ProjectConfig, OnboardingResult, HumanInTheLoopConfig } from "../types/index.js";
 import { createPmPrompt } from "../prompts/pm.js";
 import { judgmentMiddleware } from "./judgment.js";
@@ -44,11 +45,6 @@ export async function createSajiCode(
 
   const model = await createModel(config.modelConfig);
 
-  const backend = new SafeShellBackend({
-    rootDir: config.projectPath,
-    projectPath: config.projectPath,
-  });
-
   const projectContext = await loadProjectContext(config.projectPath);
   const contextPrompt = buildContextPrompt(onboardingResult);
   const pmPrompt = createPmPrompt(config.projectPath);
@@ -59,6 +55,7 @@ export async function createSajiCode(
   ].filter(Boolean).join("\n\n");
 
   const checkpointer = new MemorySaver();
+  const store = new InMemoryStore();
   const contextTools = createContextTools(config.projectPath);
   const repoMapTool = createRepoMapTool(config.projectPath);
 
@@ -79,7 +76,14 @@ export async function createSajiCode(
     name: "pm-agent",
     model,
     systemPrompt: fullSystemPrompt,
-    backend,
+    store,
+    backend: (agentConfig: any) => new CompositeBackend(
+      new SafeShellBackend({
+        rootDir: config.projectPath,
+        projectPath: config.projectPath,
+      }),
+      { "/memories/": new StoreBackend(agentConfig) }
+    ),
     tools: [
       ...contextTools,
       repoMapTool,

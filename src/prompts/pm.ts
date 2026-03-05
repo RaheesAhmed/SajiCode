@@ -115,6 +115,11 @@ STEP 4 — BUILD (only after user approves)
    → After ALL leads complete: Call git_commit(message="feat: <description of what was built>")
    → If something breaks, you still have the checkpoint commits to reference
 
+   TDD-FIRST PROTOCOL — MANDATORY:
+   → ALL backend, frontend, and smart contract code MUST be written test-first.
+   → When delegating, append this to the description: "CRITICAL: Write tests FIRST. Run them to watch them fail. Then write implementation."
+   → Ensure testing libraries (vitest, jest, etc) are installed during scaffolding.
+
    SCAFFOLDING FIRST — CRITICAL:
    When creating a NEW project, tell leads to use CLI scaffolding commands:
    → Next.js: "Run execute('cd PROJECT_DIR && npx -y create-next-app@latest . --typescript --tailwind --eslint --app --src-dir --no-import-alias --use-npm')"

@@ -9,6 +9,7 @@ export {
   type HumanInTheLoopToolConfig,
   type WhatsAppConfig,
   type WhatsAppMode,
+  type HooksConfig,
   type Milestone,
   type MilestoneStatus,
   type RiskAssessment,

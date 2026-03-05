@@ -13,6 +13,7 @@ import type { OnboardingResult, HumanInTheLoopConfig } from "./types/index.js";
 import { input as inquirerInput, select as inquirerSelect } from "@inquirer/prompts";
 import { ChannelRouter } from "./channels/router.js";
 import { WhatsAppAdapter } from "./channels/whatsapp.js";
+import { runHook } from "./utils/hooks.js";
 
 const ORANGE = chalk.hex("#FF8C00");
 const GY = chalk.gray;
@@ -150,10 +151,10 @@ async function runAgentTurn(
 
 async function main(): Promise<void> {
   const projectPath = process.cwd();
-  const renderer = new StreamRenderer();
   const cliArgs = parseArgs(process.argv.slice(2));
+  const renderer = new StreamRenderer(cliArgs.headless);
 
-  renderer.printHeader();
+  if (!cliArgs.headless) renderer.printHeader();
 
   await ensureProjectDir(projectPath);
   const config = await loadConfig(projectPath);
@@ -194,6 +195,7 @@ async function main(): Promise<void> {
     mcpServerNames = mcpClient.getServerNames();
 
     const cleanupAndExit = async (code: number) => {
+      runHook("onExit", config.hooks, projectPath);
       await mcpClient.close();
       process.exit(code);
     };
@@ -228,6 +230,32 @@ async function main(): Promise<void> {
     await router.start();
   }
 
+  // ── Headless Mode Execution ───────────────────────────────────────────
+  if (cliArgs.headless) {
+    if (!cliArgs.task) {
+      console.error(chalk.red("\n  ✗ Fatal: --task is required when running in headless mode\n"));
+      process.exit(1);
+    }
+
+    try {
+      runHook("preTask", config.hooks, projectPath);
+      await runAgentTurn(
+        agent,
+        sessionConfig,
+        { messages: [{ role: "user", content: cliArgs.task }] },
+        renderer,
+        config.humanInTheLoop
+      );
+      runHook("postTask", config.hooks, projectPath);
+      runHook("onExit", config.hooks, projectPath);
+      process.exit(0);
+    } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      console.log(chalk.red(`\n  ✗ ${err.message}\n`));
+      process.exit(1);
+    }
+  }
+
   while (true) {
     let resolved = false;
     const input = await new Promise<string | null>((resolve) => {
@@ -258,6 +286,7 @@ async function main(): Promise<void> {
 
     if (input === null) {
       console.log(G("\n👋 Goodbye!\n"));
+      runHook("onExit", config.hooks, projectPath);
       process.exit(0);
     }
 
@@ -267,6 +296,7 @@ async function main(): Promise<void> {
     // ── Built-in commands ─────────────────────────────────────────────────
     if (trimmed === "/exit" || trimmed === "/quit" || trimmed === "/q") {
       console.log(G("\n👋 Goodbye!\n"));
+      runHook("onExit", config.hooks, projectPath);
       process.exit(0);
     }
 
@@ -293,6 +323,7 @@ async function main(): Promise<void> {
 
     // ── Agent turn ────────────────────────────────────────────────────────
     try {
+      runHook("preTask", config.hooks, projectPath);
       await runAgentTurn(
         agent,
         sessionConfig,
@@ -300,6 +331,7 @@ async function main(): Promise<void> {
         renderer,
         config.humanInTheLoop
       );
+      runHook("postTask", config.hooks, projectPath);
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
       console.log(chalk.red(`\n  ✗ ${err.message}\n`));
@@ -368,7 +400,13 @@ function printHelp(): void {
 
 // ── CLI arg parser ─────────────────────────────────────────────────────────────
 
-interface CliArgs { provider?: string; model?: string; channels?: string[]; }
+interface CliArgs { 
+  provider?: string; 
+  model?: string; 
+  channels?: string[];
+  headless?: boolean;
+  task?: string; 
+}
 
 function parseArgs(args: string[]): CliArgs {
   const result: CliArgs = {};
@@ -381,6 +419,8 @@ function parseArgs(args: string[]): CliArgs {
       result.channels = next.split(",").map((c) => c.trim().toLowerCase());
       i++;
     }
+    else if (arg === "--headless" || arg === "-H") { result.headless = true; }
+    else if ((arg === "-t" || arg === "--task") && next) { result.task = next; i++; }
   }
   return result;
 }
