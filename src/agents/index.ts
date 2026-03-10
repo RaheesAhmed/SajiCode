@@ -106,7 +106,7 @@ export async function createSajiCode(
     configurable: {
       thread_id: threadId,
     },
-    recursionLimit: 300,
+    recursionLimit: 150,
   };
 
   return { agent, sessionConfig, mcpClient };

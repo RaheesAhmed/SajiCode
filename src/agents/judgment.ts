@@ -122,18 +122,19 @@ export const judgmentMiddleware = createMiddleware({
       const isSajicodeMd = filePath.includes(".sajicode") && ext === ".md";
 
       if (SOURCE_EXTENSIONS.has(ext) && !isSajicodeMd) {
-        const msg = `[JUDGMENT BLOCKED] PM Agent cannot write source code files directly. You MUST delegate this to a specialist agent via task().
+        const lineCount = typeof content === "string" ? content.split("\n").length : 0;
+        const PM_DIRECT_WRITE_THRESHOLD = 150;
 
-File attempted: "${filePath}"
-
-Use task(subagent_type="backend-lead", ...) or task(subagent_type="frontend-lead", ...) to delegate this work. Check your AGENTS AVAILABLE list and assign to the right specialist. Include "CHECK YOUR SKILLS" in every delegation.`;
-        console.log(chalk.red(`  ✗ BLOCKED: PM tried to write source code: ${filePath} — must delegate`));
-        return new ToolMessage({
-          name: toolName,
-          content: msg,
-          tool_call_id: (request.toolCall as any).id || "unknown",
-          status: "error"
-        });
+        if (lineCount >= PM_DIRECT_WRITE_THRESHOLD) {
+          const msg = `[JUDGMENT BLOCKED] PM Agent: file "${filePath}" has ${lineCount} lines (>= ${PM_DIRECT_WRITE_THRESHOLD}). Large files must be delegated to a specialist agent via task(). You CAN write files under ${PM_DIRECT_WRITE_THRESHOLD} lines directly for small tasks.`;
+          console.log(chalk.red(`  ✗ BLOCKED: PM file too large: ${filePath} (${lineCount} lines) — delegate to specialist`));
+          return new ToolMessage({
+            name: toolName,
+            content: msg,
+            tool_call_id: (request.toolCall as any).id || "unknown",
+            status: "error"
+          });
+        }
       }
 
       if (typeof content === "string" && content.length > 0) {
@@ -212,7 +213,7 @@ export const leadJudgmentMiddleware = createMiddleware({
 
       if (SOURCE_EXTENSIONS.has(ext)) {
         const lineCount = typeof content === "string" ? content.split("\n").length : 0;
-        const SMALL_FILE_THRESHOLD = 50;
+        const SMALL_FILE_THRESHOLD = 200;
 
         if (lineCount >= SMALL_FILE_THRESHOLD) {
           const msg = `[LEAD BLOCKED] File "${filePath}" has ${lineCount} lines (>= ${SMALL_FILE_THRESHOLD}).

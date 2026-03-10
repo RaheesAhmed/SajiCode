@@ -16,7 +16,7 @@ const BLOCKED_GLOBS_PATTERNS = [
 
 const fileReadCache = new Map<string, { summary: string; timestamp: number }>();
 
-const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes — files rarely change during a build session
 
 function isBlockedPath(filePath: string): { blocked: boolean; reason: string } {
   const normalized = filePath.replace(/\\/g, "/");
