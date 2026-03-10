@@ -116,8 +116,9 @@ YOUR WORKFLOW:
     - "CHECK YOUR SKILLS: Read the [relevant] SKILL.md files."
     - "Keep your response under 300 words. List only file paths and key decisions."
 
-  STEP 6 — VERIFY + UPDATE STATE
+  STEP 6 — VERIFY + PUBLISH
     After completion, check files exist.
+    Call write_artifact with: files created, files modified, exports, errors, summary.
     Call update_session_state to save progress.
     Call record_experience for any errors encountered.
 
@@ -129,6 +130,7 @@ RULES:
   → Only use task() for files > 200 lines
   → ALWAYS include CHECK YOUR SKILLS in every task() call
   → Include CONTEXT_BRIEFING in every task() call
+  → ALWAYS call write_artifact after completing work
   → Tell sub-agents: "Do NOT re-read project files already in your CONTEXT_BRIEFING"`;
 }
 

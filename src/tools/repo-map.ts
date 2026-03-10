@@ -189,11 +189,12 @@ function formatRepoMap(fileMaps: FileMap[], projectName: string): string {
 
 export function createRepoMapTool(projectPath: string) {
   return tool(
-    async ({ maxFiles, maxDepth }: { maxFiles?: number; maxDepth?: number }) => {
-      const effectiveMaxFiles = maxFiles ?? 200;
-      const effectiveMaxDepth = maxDepth ?? 6;
+    async ({ maxFiles, maxDepth, directory }: { maxFiles?: number; maxDepth?: number; directory?: string }) => {
+      const effectiveMaxFiles = maxFiles ?? 1000;
+      const effectiveMaxDepth = maxDepth ?? 10;
+      const scanRoot = directory ? path.join(projectPath, directory) : projectPath;
 
-      const codeFiles = await walkForCodeFiles(projectPath, effectiveMaxFiles, effectiveMaxDepth);
+      const codeFiles = await walkForCodeFiles(scanRoot, effectiveMaxFiles, effectiveMaxDepth);
 
       const scanResults = await Promise.all(
         codeFiles.map(f => scanFile(f, projectPath)),
@@ -201,8 +202,15 @@ export function createRepoMapTool(projectPath: string) {
 
       const fileMaps = scanResults.filter((r): r is FileMap => r !== null);
 
-      const projectName = path.basename(projectPath);
-      return formatRepoMap(fileMaps, projectName);
+      const projectName = directory ?? path.basename(projectPath);
+      const totalCodeFiles = codeFiles.length;
+      const map = formatRepoMap(fileMaps, projectName);
+      const scaleNote = totalCodeFiles >= 500
+        ? `\n\n⚠️ LARGE REPO (${totalCodeFiles} files scanned). Use code_search and find_symbol to locate specific code — do NOT read files one by one.`
+        : totalCodeFiles >= 100
+          ? `\n\n📌 Medium repo (${totalCodeFiles} files). Use code_search for targeted lookups.`
+          : "";
+      return map + scaleNote;
     },
     {
       name: "collect_repo_map",
@@ -211,8 +219,9 @@ export function createRepoMapTool(projectPath: string) {
         "Use this FIRST before reading individual files — it gives you the full codebase overview in ~50 tokens per file instead of ~500+ per read_file call. " +
         "After reviewing the map, use read_file to deep-dive into specific files you need.",
       schema: z.object({
-        maxFiles: z.number().optional().describe("Maximum number of files to scan (default: 200)"),
-        maxDepth: z.number().optional().describe("Maximum directory depth to scan (default: 6)"),
+        maxFiles: z.number().optional().describe("Maximum files to scan (default: 1000). Use lower values for faster scans."),
+        maxDepth: z.number().optional().describe("Maximum directory depth (default: 10)"),
+        directory: z.string().optional().describe("Scan only this subdirectory (e.g. 'src/server'). Leave empty for full project scan."),
       }),
     },
   );

@@ -2,6 +2,8 @@ import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 import fs from "fs/promises";
 import path from "path";
+import { getArtifactSummaries } from "./artifact-tools.js";
+import { queryExperiences, formatExperiencesForPrompt } from "../memory/experience-replay.js";
 
 const IGNORED_DIRS = new Set([
   "node_modules", "dist", "build", "coverage", ".git",
@@ -126,13 +128,20 @@ async function getDecisions(projectPath: string): Promise<string[]> {
 export function createContextBriefingTool(projectPath: string) {
   return tool(
     async (input: { currentPhase: string; currentTask: string }) => {
-      const [tree, types, deps, filesCreated, decisions] = await Promise.all([
+      const [tree, types, deps, filesCreated, decisions, artifactSummary] = await Promise.all([
         buildCompactTree(projectPath),
         extractKeyTypes(projectPath),
         getInstalledDeps(projectPath),
         getFilesCreatedThisSession(projectPath),
         getDecisions(projectPath),
+        getArtifactSummaries(projectPath),
       ]);
+
+      let pastExperiences = "";
+      try {
+        const exps = await queryExperiences(projectPath, {});
+        if (exps.length > 0) pastExperiences = formatExperiencesForPrompt(exps);
+      } catch { /* no experiences yet */ }
 
       const briefing = [
         "<CONTEXT_BRIEFING>",
@@ -156,6 +165,8 @@ export function createContextBriefingTool(projectPath: string) {
         "## Decisions Made",
         decisions.length > 0 ? decisions.map((d) => `- ${d}`).join("\n") : "No decisions recorded yet",
         "",
+        ...(artifactSummary ? [artifactSummary, ""] : []),
+        ...(pastExperiences ? ["## Past Lessons (auto-injected)", pastExperiences, ""] : []),
         `## Current Phase: ${input.currentPhase}`,
         `## Current Task: ${input.currentTask}`,
         "",

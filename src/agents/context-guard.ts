@@ -1,5 +1,9 @@
 import { createMiddleware } from "langchain";
 import { ToolMessage } from "@langchain/core/messages";
+import { execFile } from "child_process";
+import { promisify } from "util";
+
+const execFileAsync = promisify(execFile);
 
 const BLOCKED_DIRECTORIES = new Set([
   "node_modules", ".git", ".next", ".nuxt", "dist", "build",
@@ -22,8 +26,14 @@ function isBlockedPath(filePath: string): { blocked: boolean; reason: string } {
   const normalized = filePath.replace(/\\/g, "/");
 
   for (const dir of BLOCKED_DIRECTORIES) {
-    if (normalized.includes(`/${dir}/`) || normalized.includes(`/${dir}`) || normalized.endsWith(`/${dir}`)) {
-      return { blocked: true, reason: `⛔ BLOCKED: Do not scan '${dir}'. This wastes context. Use package.json for dependency info.` };
+    if (normalized.includes(`/${dir}/`) || normalized.endsWith(`/${dir}`)) {
+      const lastSegment = normalized.split("/").pop() ?? "";
+      if (lastSegment === dir) {
+        return { blocked: true, reason: `⛔ BLOCKED: Do not scan '${dir}'. This wastes context. Use package.json for dependency info.` };
+      }
+      if (normalized.includes(`/${dir}/`)) {
+        return { blocked: true, reason: `⛔ BLOCKED: Do not scan '${dir}'. This wastes context. Use package.json for dependency info.` };
+      }
     }
   }
 
@@ -113,6 +123,28 @@ export const contextGuardMiddleware = createMiddleware({
       }
     }
 
+    // Auto-fix write_todos: LLMs sometimes stringify the array or use wrong status values
+    if (toolName === "write_todos") {
+      let todos = args["todos"];
+      if (typeof todos === "string") {
+        try { todos = JSON.parse(todos as string); } catch { /* let it fail */ }
+      }
+      if (Array.isArray(todos)) {
+        const validStatuses = new Set(["pending", "in_progress", "completed"]);
+        const fixTodos = (items: any[]): any[] => items.map((item: any) => {
+          const fixed = { ...item };
+          if (!validStatuses.has(fixed.status)) {
+            fixed.status = "pending";
+          }
+          if (Array.isArray(fixed.todos)) {
+            fixed.todos = fixTodos(fixed.todos);
+          }
+          return fixed;
+        });
+        request.toolCall.args = { ...args, todos: fixTodos(todos) };
+      }
+    }
+
     // Execute the actual tool call
     const result = await handler(request) as any;
 
@@ -128,5 +160,29 @@ export const contextGuardMiddleware = createMiddleware({
     }
 
     return result;
+
+    // --- Post-write: auto tsc check for TypeScript files ---
+    // Disabled for now — will enable after testing the basic middleware flow
   },
 });
+
+export async function runQuickTscCheck(filePath: string): Promise<string> {
+  const normalized = filePath.replace(/\\/g, "/");
+  if (!normalized.endsWith(".ts") && !normalized.endsWith(".tsx")) return "";
+
+  try {
+    await execFileAsync("npx", ["tsc", "--noEmit", "--pretty"], {
+      timeout: 15000,
+      maxBuffer: 512 * 1024,
+    });
+    return "";
+  } catch (error: any) {
+    const output = (error.stdout ?? "") + (error.stderr ?? "");
+    const relevantErrors = output
+      .split("\n")
+      .filter((line: string) => line.includes("error TS"))
+      .slice(0, 5)
+      .join("\n");
+    return relevantErrors ? `\n⚠️ TypeScript errors detected:\n${relevantErrors}` : "";
+  }
+}

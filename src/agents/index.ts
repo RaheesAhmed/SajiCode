@@ -19,6 +19,9 @@ import { createSessionStateTools } from "../memory/session-state.js";
 import { contextGuardMiddleware } from "./context-guard.js";
 import { createGitTools } from "../tools/git-tools.js";
 import { createFileTrackerTools } from "../tools/file-tracker.js";
+import { createArtifactTools } from "../tools/artifact-tools.js";
+import { createDependencyOrderTool } from "../tools/dependency-graph.js";
+import { createCodeSearchTools } from "../tools/code-search.js";
 
 function buildInterruptOn(
   hitl: HumanInTheLoopConfig | undefined
@@ -71,6 +74,9 @@ export async function createSajiCode(
   const contextBriefingTool = createContextBriefingTool(config.projectPath);
   const experienceTools = createExperienceTools(config.projectPath);
   const sessionStateTools = createSessionStateTools(config.projectPath);
+  const artifactTools = createArtifactTools(config.projectPath);
+  const dependencyOrderTool = createDependencyOrderTool();
+  const codeSearchTools = createCodeSearchTools(config.projectPath);
 
   const agent = await createDeepAgent({
     name: "pm-agent",
@@ -94,6 +100,9 @@ export async function createSajiCode(
       ...mcpTools,
       ...createGitTools(config.projectPath),
       ...createFileTrackerTools(config.projectPath),
+      ...artifactTools,
+      dependencyOrderTool,
+      ...codeSearchTools,
     ] as any,
     subagents: domainHeads as any,
     middleware: [judgmentMiddleware, contextGuardMiddleware] as any,
