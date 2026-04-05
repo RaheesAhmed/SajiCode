@@ -126,7 +126,7 @@ async function runAgentTurn(
   while (true) {
     const stream = await agent.stream(input, {
       ...sessionConfig,
-      streamMode: ["updates", "messages", "custom"],
+      streamMode: ["updates", "messages"],
       subgraphs: true,
     });
 

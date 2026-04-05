@@ -3,6 +3,7 @@ import ora, { type Ora } from "ora";
 import path from "path";
 import { AGENT_ICONS, AGENT_LABELS, AgentRole } from "../types/index.js";
 import { MarkdownStream } from "streammark";
+import { AIMessageChunk, ToolMessage } from "@langchain/core/messages";
 
 const O = chalk.hex("#FF8C00");
 const DIM = chalk.hex("#996600");
@@ -12,7 +13,7 @@ const CY = chalk.cyan;
 const WH = chalk.white;
 const YL = chalk.yellow;
 const RD = chalk.red;
-const BL = chalk.blue;
+
 
 // ── Public interrupt type consumed by index.ts ────────────────────────────────
 export interface ActionRequest {
@@ -38,10 +39,12 @@ interface PendingTool {
   name: string;
   argsBuffer: string;
   agentName: string;
+  shownContentLength?: number;  // Track how much content has been printed
+  filePath?: string;            // Track file path for write_file/edit_file
 }
 
 export class StreamRenderer {
-  private currentAgent = "";
+  
   private agents = new Map<string, ActiveAgent>();
   private namespaceToAgent = new Map<string, string>();
   private pendingTool: PendingTool | null = null;
@@ -50,7 +53,9 @@ export class StreamRenderer {
   private mainSpinner: Ora | null = null;
   private toolSpinner: Ora | null = null;
   private thinkingSpinner: Ora | null = null;
-  private receivedFirstToken = false;
+  private currentSource = "";  // Track which agent is currently streaming tokens
+  private midLine = false;     // Track if we're in the middle of a line
+
 
   constructor(private readonly isHeadless: boolean = false) {}
 
@@ -163,151 +168,46 @@ export class StreamRenderer {
     }
   }
 
-  private showToolStartSpinner(toolName: string, agentName: string): void {
-    const icon = this.agentIcon(agentName);
-    const toolLabels: Record<string, [string, string]> = {
-      write_file: ["✏", "Writing..."],
-      edit_file: ["✎", "Editing..."],
-      execute: ["$", "Executing command..."],
-      read_file: ["⊞", "Reading..."],
-      ls: ["📂", "Listing..."],
-      grep: ["🔍", "Searching..."],
-      glob: ["🔍", "Globbing..."],
-      task: ["🚀", "Delegating..."],
-      write_todos: ["📋", "Planning..."],
-      collect_project_context: ["⚡", "Scanning project..."],
-      collect_repo_map: ["🗺️", "Mapping codebase..."],
-      save_memory: ["💾", "Saving memory..."],
-      update_project_context: ["📝", "Updating context..."],
-      update_agent_memory: ["🧠", "Saving memory..."],
-      update_project_log: ["📒", "Updating log..."],
-      tavily_search_results_json: ["🌐", "Searching web..."],
-      git_status: ["📊", "Checking git..."],
-      git_commit: ["💾", "Committing..."],
-      git_branch: ["🌿", "Creating branch..."],
-      git_diff: ["📋", "Checking diff..."],
-      git_checkpoint: ["📌", "Checkpointing..."],
-      snapshot_file: ["📸", "Snapshotting..."],
-      undo_file_change: ["⏪", "Undoing change..."],
-      list_snapshots: ["📸", "Listing snapshots..."],
-      generate_context_briefing: ["📑", "Generating briefing..."],
-      record_experience: ["📚", "Recording experience..."],
-      query_experiences: ["🔎", "Querying experiences..."],
-    };
+  
 
-    const [emoji, label] = toolLabels[toolName] ?? ["⚡", `${toolName}...`];
-    console.log(`  ${icon} ${DIM(agentName)} ${GY("▸")} ${CY(emoji)} ${GY(label)}`);
-
-    if (["write_file", "edit_file", "execute", "read_file", "grep", "ls", "glob", "tavily_search_results_json"].includes(toolName)) {
-      this.startToolSpinner(label);
-    }
-  }
-
-  private updateToolSpinnerFromArgs(tool: PendingTool): void {
-    if (!this.toolSpinner) return;
-
-    const buf = tool.argsBuffer;
-
-    // Regex-extract values from the partially-streamed JSON buffer.
-    // JSON.parse would fail until the full object is received — regex works on partials.
-    const extractStr = (key: string): string | undefined => {
-      const m = buf.match(new RegExp(`"${key}"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)`));
-      return m ? m[1] : undefined;
-    };
-
-    if (tool.name === "execute" || tool.name === "bash") {
-      const cmd = extractStr("command") ?? extractStr("bash");
-      if (cmd) {
-        const display = cmd.length > 100 ? cmd.slice(0, 97) + "..." : cmd;
-        this.toolSpinner.text = GY(`$ ${display}`);
-      }
-      return;
-    }
-
-    if (tool.name === "write_file" || tool.name === "edit_file") {
-      const filePath = extractStr("file_path") ?? extractStr("path");
-      if (!filePath) return;
-
-      const bn = path.basename(filePath);
-      const dir = path.dirname(filePath);
-      const shortDir = dir.length > 35 ? "..." + dir.slice(-32) : dir;
-
-      // Count lines already streamed in the content value
-      const contentMatch = buf.match(/"content"\s*:\s*"((?:[^"\\]|\\.)*)/s);
-      const linesStreamed = contentMatch?.[1]?.split("\\n").length ?? 0;
-
-      const lineLabel = linesStreamed > 1 ? ` (${linesStreamed} lines)` : "";
-      const verb = tool.name === "write_file" ? "Writing" : "Editing";
-      this.toolSpinner.text = GY(`${verb} ${shortDir}/${bn}${lineLabel}`);
-      return;
-    }
-
-    if (tool.name === "read_file") {
-      const filePath = extractStr("file_path") ?? extractStr("path");
-      if (!filePath) return;
-      const dir = path.dirname(filePath);
-      const shortDir = dir.length > 30 ? "..." + dir.slice(-27) : dir;
-      this.toolSpinner.text = GY(`Reading ${shortDir}/${path.basename(filePath)}`);
-      return;
-    }
-
-    if (tool.name === "ls") {
-      const filePath = extractStr("path") ?? extractStr("directory");
-      if (!filePath) return;
-      const short = filePath.length > 55 ? "..." + filePath.slice(-52) : filePath;
-      this.toolSpinner.text = GY(`Listing ${short}`);
-      return;
-    }
-
-    if (tool.name === "grep") {
-      const pattern = extractStr("pattern") ?? extractStr("query");
-      const filePath = extractStr("file_path") ?? extractStr("path");
-      if (!pattern) return;
-      const shortPat = pattern.length > 35 ? pattern.slice(0, 32) + "..." : pattern;
-      const inFile = filePath ? ` in ${path.basename(filePath)}` : "";
-      this.toolSpinner.text = GY(`Searching "${shortPat}"${inFile}`);
-      return;
-    }
-
-    if (tool.name === "glob") {
-      const pattern = extractStr("pattern");
-      if (pattern) this.toolSpinner.text = GY(`Globbing ${pattern}`);
-      return;
-    }
-
-    if (tool.name === "tavily_search_results_json") {
-      const query = extractStr("query");
-      if (!query) return;
-      const shortQ = query.length > 55 ? query.slice(0, 52) + "..." : query;
-      this.toolSpinner.text = GY(`Searching web for "${shortQ}"`);
-      return;
-    }
-  }
+ 
 
   /**
    * Main streaming loop.
+   * Handles multiple stream modes: updates, messages, custom.
    * Returns InterruptInfo if the agent paused for HITL approval, null if done normally.
    */
   async processMultiStream(
-    stream: AsyncIterable<[string[], string, any]>
+    stream: AsyncIterable<[string[], any, any?]>
   ): Promise<InterruptInfo | null> {
-    this.receivedFirstToken = false;
+    
     this.startThinkingSpinner();
     let interrupt: InterruptInfo | null = null;
 
-    for await (const [namespace, mode, data] of stream) {
+    for await (const event of stream) {
+      // Handle both 2-tuple (single mode) and 3-tuple (multi-mode) formats
+      const namespace = event[0];
+      const modeOrData = event[1];
+      const maybeData = event[2];
+
+      // Determine if this is multi-mode (3-tuple) or single-mode (2-tuple)
+      const isMultiMode = maybeData !== undefined;
+      const mode = isMultiMode ? modeOrData : "updates";
+      const data = isMultiMode ? maybeData : modeOrData;
+
       const isSubagent = namespace.some((s: string) => s.startsWith("tools:"));
       const source = isSubagent
         ? namespace.find((s: string) => s.startsWith("tools:")) ?? "subagent"
         : "main";
 
-      if (mode === "messages") {
-        this.onMessage(source, data, isSubagent);
-      } else if (mode === "updates") {
+      if (mode === "updates") {
         const result = this.onUpdate(source, namespace, data, isSubagent);
         if (result) interrupt = result;
+      } else if (mode === "messages") {
+        this.onMessage(source, namespace, data, isSubagent);
       } else if (mode === "custom") {
-        this.onCustom(data);
+        // Handle custom events if needed
+        this.onCustomEvent(source, namespace, data, isSubagent);
       }
     }
 
@@ -336,64 +236,9 @@ export class StreamRenderer {
     }
   }
 
-  private markFirstToken(): void {
-    if (!this.receivedFirstToken) {
-      this.receivedFirstToken = true;
-      this.stopThinkingSpinner();
-    }
-  }
-
-  private onMessage(source: string, data: any, isSubagent: boolean): void {
-    const [msg] = Array.isArray(data) ? data : [data];
-    if (!msg) return;
-
-    const agentName = isSubagent ? this.resolveAgent(source) : "PM Agent";
-
-    if (msg.type === "tool") {
-      this.finishPendingTool();
-      this.stopToolSpinner();
-      this.renderToolResult(msg, agentName);
-      return;
-    }
-
-    if (msg.tool_call_chunks?.length) {
-      for (const tc of msg.tool_call_chunks) {
-        if (tc.name) {
-          this.markFirstToken();
-          this.finishPendingTool();
-          this.flushBuffer();
-          this.stopToolSpinner();
-          this.pendingTool = {
-            name: tc.name,
-            argsBuffer: tc.args ?? "",
-            agentName,
-          };
-          this.showToolStartSpinner(tc.name, agentName);
-        } else if (tc.args && this.pendingTool) {
-          this.pendingTool.argsBuffer += tc.args;
-          this.updateToolSpinnerFromArgs(this.pendingTool);
-        }
-      }
-      return;
-    }
-
-    const text = msg.text ?? (typeof msg.content === "string" ? msg.content : null);
-    if (text) {
-      this.markFirstToken();
-      this.finishPendingTool();
-      this.stopToolSpinner();
-      this.ensureAgentHeader(agentName);
-      this.tokenBuffer += text;
-      if (!this.mdStream) {
-        this.mdStream = new MarkdownStream({ theme: "dark" });
-      }
-      this.mdStream.write(text);
-    }
-  }
-
   /** Returns InterruptInfo when __interrupt__ is detected, else null */
   private onUpdate(
-    _source: string,
+    source: string,
     namespace: string[],
     data: any,
     isSubagent: boolean
@@ -418,6 +263,8 @@ export class StreamRenderer {
       // Detect task() spawns at ANY level — not just main agent
       if (node === "model_request") {
         this.detectSpawns(nodeData);
+        // Display AI response content from model_request
+        this.renderModelResponse(nodeData, source, isSubagent);
       }
 
       if (isSubagent) {
@@ -428,26 +275,156 @@ export class StreamRenderer {
       // Detect completions at ANY level where 'tools' node has ToolMessage results
       if (node === "tools") {
         this.detectComplete(nodeData);
+        // Display tool results
+        this.renderToolResults(nodeData);
       }
     }
 
     return null;
   }
 
-  private onCustom(data: any): void {
-    if (!data) return;
+  /**
+   * Render AI model responses from model_request node data.
+   * Note: When using 'messages' stream mode, tokens are printed via onMessage,
+   * so this only handles non-streaming cases and tool calls.
+   */
+  private renderModelResponse(data: any, _source: string, _isSubagent: boolean): void {
+    const messages = (data as any)?.messages ?? [];
+    for (const msg of messages) {
+      // Skip printing content when using token streaming (currentSource indicates streaming is active)
+      // Only handle tool calls here
+      
+      // Handle tool calls in the response
+      if (msg.tool_calls && msg.tool_calls.length > 0) {
+        for (const tc of msg.tool_calls) {
+          if (tc.name) {
+            console.log(`  ${chalk.cyan("→")} ${chalk.gray(`Calling ${tc.name}...`)}`);
+          }
+        }
+      }
+    }
+  }
 
-    if (data.type === "agent_progress") {
-      const { agent, phase, detail } = data;
-      const icon = agent ? this.agentIcon(agent) : GY("●");
-      const label = agent ? this.subAgentLabel(agent) : "System";
-      console.log(`  ${icon} ${DIM(label)} ${GY("▸")} ${CY(phase ?? "")} ${GY(detail ?? "")}`);
-      return;
+  /**
+   * Render tool execution results
+   */
+  private renderToolResults(data: any): void {
+    const messages = (data as any)?.messages ?? [];
+    for (const msg of messages) {
+      if (msg.type === "tool" && msg.name) {
+        const content = String(msg.content ?? "");
+        const shortContent = content.slice(0, 150);
+        console.log(`    ${chalk.green("✓")} ${chalk.gray(`${msg.name}: ${shortContent}${content.length > 150 ? "..." : ""}`)}`);
+      }
+    }
+  }
+
+  /**
+   * Handle messages stream mode - displays LLM tokens and tool calls.
+   */
+  private onMessage(
+    source: string,
+    _namespace: string[],
+    data: any,
+    isSubagent: boolean
+  ): void {
+    const [message] = data;
+    if (!message) return;
+
+    // Tool call chunks (streaming tool invocations)
+    if (AIMessageChunk.isInstance(message) && message.tool_call_chunks?.length) {
+      for (const tc of message.tool_call_chunks) {
+        if (tc.name) {
+          // New tool call started
+          this.finishPendingTool();
+          this.pendingTool = {
+            name: tc.name,
+            argsBuffer: "",
+            agentName: source,
+          };
+          this.startToolSpinner(`Calling ${tc.name}...`);
+        }
+        // Args stream in chunks - accumulate them
+        if (tc.args) {
+          if (this.pendingTool) {
+            this.pendingTool.argsBuffer += tc.args;
+          }
+        }
+      }
     }
 
-    if (data.status) {
-      this.flushBuffer();
-      console.log(GY(`  ● ${data.status}`));
+    // Tool results
+    if (ToolMessage.isInstance(message)) {
+      this.finishPendingTool();
+      if (message.name) {
+        const shortResult = String(message.content ?? "").slice(0, 100);
+        console.log(`    ${chalk.cyan("→")} ${chalk.gray(`${message.name}: ${shortResult}${String(message.content ?? "").length > 100 ? "..." : ""}`)}`);
+      }
+    }
+
+    // Regular AI content (tokens) - skip tool call messages
+    if (
+      AIMessageChunk.isInstance(message) &&
+      message.text &&
+      !message.tool_call_chunks?.length
+    ) {
+      // Stop thinking spinner when tokens start arriving
+      this.stopThinkingSpinner();
+      
+      if (!this.isHeadless && !this.pendingTool) {
+        // Determine display label
+        const displaySource = isSubagent ? source : "main";
+        
+        // When source changes, finalize previous stream and start fresh
+        if (displaySource !== this.currentSource) {
+          if (this.mdStream) {
+            this.mdStream.end();
+            this.mdStream = null;
+          }
+          if (this.midLine) {
+            process.stdout.write("\n");
+            this.midLine = false;
+          }
+          const label = isSubagent 
+            ? `[${this.subAgentLabel(displaySource.replace("tools:", "").split(":")[0] ?? "subagent")}]`
+            : ">_";
+          const color = isSubagent ? chalk.gray : chalk.hex("#FF6A00");
+          process.stdout.write(`\n  ${color(label)} \n`);
+          this.currentSource = displaySource;
+        }
+        
+        // Initialize MarkdownStream if needed
+        if (!this.mdStream) {
+          this.mdStream = new MarkdownStream({ theme: "dark" });
+        }
+        
+        // Write token to markdown stream for beautiful rendering
+        this.mdStream.write(message.text);
+        this.midLine = true;
+      }
+    }
+  }
+
+  /**
+   * Handle custom stream mode - displays custom progress events.
+   */
+  private onCustomEvent(
+    source: string,
+    _namespace: string[],
+    data: any,
+    _isSubagent: boolean
+  ): void {
+    // Handle custom progress events from tools
+    if (data && typeof data === "object") {
+      const { status, progress } = data;
+      if (status || progress !== undefined) {
+        const icon = status === "complete" ? chalk.green("✓") :
+                     status === "error" ? chalk.red("✗") :
+                     status === "in_progress" || status === "analyzing" ? chalk.yellow("●") :
+                     chalk.gray("○");
+        const progressStr = progress !== undefined ? ` ${progress}%` : "";
+        console.log(`    ${icon} ${chalk.gray(`[${source}]`)} ${chalk.gray(status)}${chalk.gray(progressStr)}`);
+      }
     }
   }
 
@@ -568,179 +545,9 @@ export class StreamRenderer {
     this.startToolSpinner(`${label} is working...`);
   }
 
-  private renderToolResult(msg: any, _agentName: string): void {
-    this.stopToolSpinner();
-    const toolName = String(msg.name ?? "tool");
-    const content = typeof msg.content === "string"
-      ? msg.content
-      : JSON.stringify(msg.content);
+  
 
-    if (toolName === "write_todos") return;
-
-    if (toolName === "write_file") {
-      const match = content.match(/Successfully wrote to ['"]?(.+?)['"]?(\s|$)/);
-      if (match) console.log(`    ${G("✓")} ${GY("Saved")} ${GY(path.basename(match[1]))}`);
-      return;
-    }
-
-    if (toolName === "read_file") {
-      if (!content || content.startsWith("Error:")) {
-        if (content) console.log(`    ${RD("✗")} ${RD(content.slice(0, 100))}`);
-        return;
-      }
-      // Show actual content preview — this is what user asked for
-      const lines = content.split("\n");
-      const preview = Math.min(8, lines.length);
-      console.log(`    ${BL("┌─")} ${GY(`${lines.length} lines`)}`);
-      for (let i = 0; i < preview; i++) {
-        const num = GY(String(i + 1).padStart(3));
-        const text = lines[i].length > 80 ? lines[i].slice(0, 77) + "..." : lines[i];
-        console.log(`    ${BL("│")} ${num} ${GY(text)}`);
-      }
-      if (lines.length > 8) {
-        console.log(`    ${BL("│")} ${GY(`    … ${lines.length - 8} more lines`)}`);
-      }
-      console.log(`    ${BL("└─")}`);
-      return;
-    }
-
-    if (toolName === "execute") {
-      const trimmed = content.trim();
-      if (trimmed.length > 0) {
-        const allLines = trimmed.split("\n");
-        const exitMatch = allLines.find((l: string) => l.includes("[Command"));
-        const outputLines = allLines.filter((l: string) => !l.includes("[Command"));
-        const show = outputLines.slice(0, 15);
-        if (show.length > 0) {
-          console.log(`    ${GY("┌─ output")}`);
-          for (const line of show) {
-            console.log(`    ${GY("│")} ${GY(line.slice(0, 120))}`);
-          }
-          if (outputLines.length > 15) {
-            console.log(`    ${GY("│")} ${GY(`… ${outputLines.length - 15} more lines`)}`);
-          }
-          console.log(`    ${GY("└─")}`);
-        }
-        if (exitMatch) {
-          const succeeded = exitMatch.includes("exit code 0");
-          const icon = succeeded ? G("✓") : RD("✗");
-          console.log(`    ${icon} ${GY(exitMatch.replace(/[\[\]]/g, "").trim())}`);
-        }
-      } else {
-        console.log(`    ${G("✓")} ${GY("<no output>")}`);
-      }
-      return;
-    }
-
-    if (toolName === "ls") {
-      const trimmed = content.trim();
-      if (!trimmed || trimmed.includes("No files found")) {
-        console.log(`    ${GY("(empty)")}`);
-      } else {
-        const entries = trimmed.split("\n").slice(0, 12);
-        for (const e of entries) {
-          const isDir = e.includes("(dir)") || e.endsWith("/");
-          console.log(`    ${GY(isDir ? "📁" : "📄")} ${GY(e.replace("(dir)", "").trim())}`);
-        }
-        const total = trimmed.split("\n").length;
-        if (total > 12) console.log(`    ${GY(`… ${total - 12} more`)}`);
-      }
-      return;
-    }
-
-    if (toolName === "grep" || toolName === "glob") {
-      const lines = content.trim().split("\n").slice(0, 6);
-      for (const line of lines) console.log(`    ${CY("▸")} ${GY(line.slice(0, 100))}`);
-      return;
-    }
-
-    if (toolName === "tavily_search_results_json") {
-      try {
-        const parsed = JSON.parse(content);
-        const results = Array.isArray(parsed) ? parsed : (parsed.results || []);
-        if (results.length > 0) {
-          const show = results.slice(0, 3);
-          for (const res of show) {
-            console.log(`    ${CY("▸")} ${WH(res.title ?? "Result")}`);
-            const snippet = (res.content ?? res.snippet ?? "").slice(0, 100).replace(/\n/g, ' ');
-            console.log(`      ${GY(snippet + "...")}`);
-          }
-          if (results.length > 3) {
-            console.log(`    ${GY(`    … ${results.length - 3} more results`)}`);
-          }
-        } else {
-          console.log(`    ${GY("No results found.")}`);
-        }
-      } catch (err) {
-        console.log(`    ${G("✓")} ${GY("Search completed")}`);
-      }
-      return;
-    }
-
-    if (content.startsWith("Error:") || content.startsWith("BLOCKED") || content.startsWith("[JUDGMENT")) {
-      console.log(`    ${RD("✗")} ${RD(content.slice(0, 150))}`);
-      return;
-    }
-
-    if (toolName === "collect_repo_map") {
-      const lines = content.split("\n");
-      const totalLine = lines.find((l: string) => l.startsWith("Total:"));
-      if (totalLine) {
-        console.log(`    ${G("✓")} ${CY("🗺️")} ${GY(totalLine)}`);
-      }
-      const fileHeaders = lines.filter((l: string) => l.startsWith("### ")).slice(0, 5);
-      for (const h of fileHeaders) {
-        console.log(`    ${GY("  ")}${GY(h.replace("### ", ""))}`);
-      }
-      if (fileHeaders.length > 0) {
-        const totalFiles = lines.filter((l: string) => l.startsWith("### ")).length;
-        if (totalFiles > 5) console.log(`    ${GY(`  … ${totalFiles - 5} more files`)}`);
-      }
-      return;
-    }
-
-    if (toolName === "update_agent_memory") {
-      console.log(`    ${G("✓")} ${GY(content)}`);
-      return;
-    }
-
-    if (toolName === "collect_project_context") {
-      try {
-        const parsed = JSON.parse(content);
-        const stack = parsed.techStack?.join(", ") ?? "unknown";
-        const fileCount = parsed.totalFiles ?? 0;
-        console.log(`    ${G("✓")} ${GY(`${fileCount} files | Stack: ${stack}`)}`);
-      } catch {
-        console.log(`    ${G("✓")} ${GY("Project context loaded")}`);
-      }
-      return;
-    }
-
-    if (toolName.startsWith("git_") || toolName === "snapshot_file" || toolName === "undo_file_change" || toolName === "list_snapshots") {
-      this.renderGitResult(toolName, content);
-      return;
-    }
-
-    if (content.length > 0 && content.length <= 100) {
-      console.log(`    ${G("✓")} ${GY(content)}`);
-    }
-  }
-
-  private renderGitResult(toolName: string, content: string): void {
-    const lines = content.split("\n").slice(0, 8);
-    const icons: Record<string, string> = {
-      git_commit: "💾",
-      git_branch: "🌿",
-      git_checkpoint: "📌",
-      git_status: "📊",
-      git_diff: "📋",
-    };
-    const icon = icons[toolName] ?? "📦";
-    console.log(`    ${G("✓")} ${CY(icon)} ${GY(lines[0] ?? "done")}`);
-    for (const line of lines.slice(1)) {
-      if (line.trim()) console.log(`    ${GY("  ")}${GY(line)}`);
-    }
-  }
+  
 
   /** Print the HITL interrupt prompt to the terminal */
   printInterrupt(interrupt: InterruptInfo): void {
@@ -786,17 +593,7 @@ export class StreamRenderer {
     console.log(`  ${G("✓")} ${GY("Auto-approved:")} ${GY(short)}`);
   }
 
-  private ensureAgentHeader(agentName: string): void {
-    if (agentName === this.currentAgent) return;
-    this.flushBuffer();
-    
-    const bgOrange = chalk.bgHex("#FF6A00").black.bold;
-    
-    console.log("");
-    console.log(`  ${bgOrange(` ${agentName} `)}`);
-    console.log("");
-    this.currentAgent = agentName;
-  }
+ 
 
   private detectSpawns(data: any): void {
     const messages = (data as any)?.messages ?? [];
@@ -848,21 +645,7 @@ export class StreamRenderer {
     }
   }
 
-  private resolveAgent(source: string): string {
-    if (source === "main") return "PM Agent";
-
-    const agentId = this.namespaceToAgent.get(source);
-    if (agentId) {
-      const agent = this.agents.get(agentId);
-      if (agent) return this.subAgentLabel(agent.name);
-    }
-
-    // Find the deepest-level working agent
-    for (const [_id, agent] of this.agents) {
-      if (agent.status === "working") return this.subAgentLabel(agent.name);
-    }
-    return "Subagent";
-  }
+  
 
 
   private subAgentLabel(name: string): string {
