@@ -1,6 +1,6 @@
 ---
 name: mobile-app
-description: Build cross-platform mobile applications with React Native and Expo. Covers project setup, navigation (React Navigation, Expo Router), native modules, push notifications, offline-first architecture, app store deployment, responsive layouts, platform-specific code, state management, and performance optimization. Use when building mobile apps or cross-platform experiences.
+description: "Build cross-platform mobile applications with React Native and Expo. Covers Expo Router navigation, NativeWind styling, offline-first architecture with AsyncStorage, push notifications, platform-specific code, and performance optimization for FlatList and animations. Use when building mobile apps, adding mobile features, or creating cross-platform experiences."
 ---
 
 # Mobile App Development
@@ -12,22 +12,26 @@ description: Build cross-platform mobile applications with React Native and Expo
 | Expo (managed) | Most apps, fast iteration | Limited native module access |
 | Expo (dev build) | Full native access + Expo DX | Requires native build |
 | React Native CLI | Maximum control, custom native | More setup, slower iteration |
-| Progressive Web App | Simple mobile web experience | Limited device APIs |
 
-## Project Setup (Expo Router)
+## Development Workflow
+
+### Step 1: Initialize Project
+
 ```bash
 npx -y create-expo-app@latest my-app --template tabs
 cd my-app && npx expo start
 ```
 
-## Navigation (Expo Router)
+**Checkpoint:** App launches in simulator/device before adding features.
+
+### Step 2: Set Up Navigation (Expo Router)
+
 ```
 app/
 ├── _layout.tsx           # Root layout
 ├── (tabs)/
 │   ├── _layout.tsx       # Tab bar layout
 │   ├── index.tsx         # Home tab
-│   ├── explore.tsx       # Explore tab
 │   └── profile.tsx       # Profile tab
 ├── (auth)/
 │   ├── _layout.tsx       # Auth flow layout
@@ -37,10 +41,9 @@ app/
 └── modal.tsx             # Modal screen
 ```
 
-### Tab Layout
 ```tsx
 import { Tabs } from "expo-router";
-import { Home, Search, User } from "lucide-react-native";
+import { Home, User } from "lucide-react-native";
 
 export default function TabLayout() {
   return (
@@ -51,41 +54,16 @@ export default function TabLayout() {
       headerTintColor: "#fff",
     }}>
       <Tabs.Screen name="index" options={{ title: "Home", tabBarIcon: ({ color }) => <Home size={22} color={color} /> }} />
-      <Tabs.Screen name="explore" options={{ title: "Explore", tabBarIcon: ({ color }) => <Search size={22} color={color} /> }} />
       <Tabs.Screen name="profile" options={{ title: "Profile", tabBarIcon: ({ color }) => <User size={22} color={color} /> }} />
     </Tabs>
   );
 }
 ```
 
-## Styling (NativeWind / StyleSheet)
-```tsx
-import { StyleSheet, View, Text } from "react-native";
+### Step 3: Implement Data Layer
 
-export function Card({ title, description }: { title: string; description: string }) {
-  return (
-    <View style={styles.card}>
-      <Text style={styles.title}>{title}</Text>
-      <Text style={styles.description}>{description}</Text>
-    </View>
-  );
-}
+Use TanStack Query for server state with offline support:
 
-const styles = StyleSheet.create({
-  card: {
-    backgroundColor: "#1a1a1a",
-    borderRadius: 16,
-    padding: 16,
-    marginVertical: 8,
-    borderWidth: 1,
-    borderColor: "#2a2a2a",
-  },
-  title: { fontSize: 18, fontWeight: "700", color: "#fff", marginBottom: 4 },
-  description: { fontSize: 14, color: "#999", lineHeight: 20 },
-});
-```
-
-## Data Fetching (TanStack Query)
 ```tsx
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
@@ -107,31 +85,31 @@ function useCreateUser() {
 }
 ```
 
-## Offline-First Pattern
+### Step 4: Add Offline Support
+
 ```tsx
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import NetInfo from "@react-native-community/netinfo";
 
 async function fetchWithOffline<T>(key: string, fetchFn: () => Promise<T>): Promise<T> {
   const isConnected = (await NetInfo.fetch()).isConnected;
-
   if (isConnected) {
     try {
       const data = await fetchFn();
       await AsyncStorage.setItem(key, JSON.stringify(data));
       return data;
-    } catch {
-      // Fall through to cache
-    }
+    } catch { /* fall through to cache */ }
   }
-
   const cached = await AsyncStorage.getItem(key);
   if (cached) return JSON.parse(cached);
   throw new Error("No data available offline");
 }
 ```
 
-## Push Notifications (Expo)
+**Checkpoint:** Test offline behavior by enabling airplane mode — cached data should render.
+
+### Step 5: Configure Push Notifications
+
 ```tsx
 import * as Notifications from "expo-notifications";
 import * as Device from "expo-device";
@@ -146,8 +124,9 @@ async function registerForPushNotifications(): Promise<string | null> {
 ```
 
 ## Platform-Specific Code
+
 ```tsx
-import { Platform } from "react-native";
+import { Platform, StyleSheet } from "react-native";
 
 const styles = StyleSheet.create({
   shadow: Platform.select({
@@ -159,9 +138,10 @@ const styles = StyleSheet.create({
 ```
 
 ## Performance Rules
+
 - Use `FlatList` for long lists — never `ScrollView` with `.map()`
 - Memoize expensive computations with `useMemo` and `useCallback`
 - Use `React.memo` for list items
 - Optimize images: resize, compress, use `expo-image` for caching
-- Avoid inline styles (create `StyleSheet` once)
-- Use `Animated` API or `react-native-reanimated` for smooth animations
+- Create `StyleSheet` once outside the component — avoid inline styles
+- Use `react-native-reanimated` for smooth 60fps animations

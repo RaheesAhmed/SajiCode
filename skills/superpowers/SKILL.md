@@ -1,76 +1,92 @@
 ---
 name: superpowers
-description: Core engineering workflow that activates on EVERY task. Enforces systematic plan-before-code methodology, multi-file refactoring safety, dependency-aware changes, pre-flight verification, and zero-placeholder quality standards. Use PROACTIVELY on all coding tasks.
+description: "Systematic engineering workflow for safe multi-file refactoring, cross-file renames, dependency-aware restructuring, and production code quality enforcement. Provides analyze-plan-implement-verify cycle with pre-flight checklists and rollback planning. Use when refactoring across multiple files, renaming or moving modules, reorganizing code structure, or making large-scale changes that affect imports and dependencies."
 ---
 
 # Engineering Superpowers
 
-## Workflow (ALWAYS follow this order)
+## Workflow (follow this order for every task)
 
 ### 1. ANALYZE — Understand before you touch
-```
-read_file → grep → glob → understand patterns → identify dependencies
-```
-- Read every file you plan to modify BEFORE writing anything
-- Check `package.json` / `requirements.txt` for existing dependencies
-- Map the dependency graph: what imports what
-- Identify established patterns (naming, structure, error handling)
-- Check for existing tests related to the code you'll change
+
+Read every file to modify BEFORE writing anything:
+
+1. Run `read_file` on each target file and its direct imports
+2. Check `package.json` / `requirements.txt` for existing dependencies
+3. Map the dependency graph: what imports what
+4. Identify established patterns (naming, structure, error handling)
+5. Check for existing tests related to the code being changed
+
+**Checkpoint:** Can you list every file that will be affected and why? If not, read more.
 
 ### 2. PLAN — Think before you code
-- Break task into ordered steps with `write_todos`
-- Identify files to create vs modify vs delete
-- Map the blast radius: what breaks if you change X?
-- Plan the order of changes (dependencies first, dependents after)
-- Consider edge cases BEFORE implementing
+
+1. Break task into ordered steps with `write_todos`
+2. Identify files to create vs modify vs delete
+3. Map the blast radius: what breaks if you change X?
+4. Plan change order (dependencies first, dependents after)
+5. Consider edge cases BEFORE implementing
+
+**Checkpoint:** Does the plan account for all imports and consumers of changed files?
 
 ### 3. IMPLEMENT — Write production code
+
 - Complete, working code — never TODOs, placeholders, or stubs
-- Handle ALL edge cases: empty input, null, undefined, network errors, timeouts
+- Handle edge cases: empty input, null, undefined, network errors, timeouts
 - Use proper TypeScript types — `unknown` over `any`, explicit return types
 - Follow patterns already in the codebase
 - Install dependencies BEFORE importing them
 
 ### 4. VERIFY — Prove it works
-- Search for `TODO`, `FIXME`, `PLACEHOLDER`, `HACK` in your output
-- Verify all imports resolve to real files/packages
-- Run build command to catch type errors
-- Run tests if they exist
-- Check for unused imports and dead code
+
+1. Search for `TODO`, `FIXME`, `PLACEHOLDER`, `HACK` in your output
+2. Verify all imports resolve to real files/packages
+3. Run build command to catch type errors
+4. Run tests if they exist
+5. Check for unused imports and dead code
+
+**Checkpoint:** Does the build pass? Are all tests green? If not, fix before proceeding.
 
 ## Multi-File Refactoring Safety
 
 ### Pre-Flight Checklist
-```
+
+Before touching any file:
+
 1. List ALL files that will be affected
-2. Check git status — are there uncommitted changes?
+2. Check `git status` — are there uncommitted changes? If so, commit or stash first
 3. Identify the dependency order for changes
 4. Plan rollback: what to revert if something breaks
-```
 
 ### Change Order Protocol
-```
+
 1. Create new files first (no existing code depends on them)
 2. Update shared modules (types, utils, constants)
 3. Update consumers (components, routes, handlers)
 4. Update entry points (index files, main files)
 5. Remove deprecated code LAST
-```
+6. **Verify build passes after each step** — do not batch all changes
 
 ### Rename/Move Safety
-```
-1. Find ALL references: grep for imports, usages, config references
+
+1. `grep` for ALL references: imports, usages, config references
 2. Update ALL import paths in dependent files
-3. Update barrel exports (index.ts files)
-4. Update config files (tsconfig paths, webpack aliases)
+3. Update barrel exports (`index.ts` files)
+4. Update config files (`tsconfig` paths, webpack aliases)
 5. Verify build passes after EVERY rename
-```
 
-## Code Quality Standards
+## Code Quality Rules
 
-### TypeScript
+- `unknown` over `any` — narrow with type guards
+- Structured logger or throw over `console.log` for errors
+- Parameterized queries and `URL` API over string concatenation in SQL/URLs
+- Always handle or rethrow in catch blocks — never empty
+- Constants, config, or environment variables over hardcoded values
+- No barrel re-exports with side effects (breaks tree-shaking)
+- No circular imports — restructure to break the cycle
+
 ```ts
-// GOOD: Explicit types, error handling, validation
+// Pattern: explicit types, validation, error handling
 async function fetchUser(id: string): Promise<User> {
   if (!id?.trim()) throw new Error("User ID required");
   const response = await fetch(`/api/users/${encodeURIComponent(id)}`);
@@ -79,60 +95,4 @@ async function fetchUser(id: string): Promise<User> {
   }
   return response.json() as Promise<User>;
 }
-
-// BAD: No types, no validation, no error handling
-async function fetchUser(id) {
-  const res = await fetch(`/api/users/${id}`);
-  return res.json();
-}
 ```
-
-### Error Handling
-```ts
-// Typed error classes over generic Error
-class AppError extends Error {
-  constructor(message: string, public code: string, public statusCode: number) {
-    super(message);
-    this.name = "AppError";
-  }
-}
-
-// Async error boundary pattern
-async function safeExecute<T>(fn: () => Promise<T>, fallback: T): Promise<T> {
-  try {
-    return await fn();
-  } catch (error) {
-    logger.error("Operation failed", { error: error instanceof Error ? error.message : String(error) });
-    return fallback;
-  }
-}
-```
-
-### Naming Conventions
-| Type | Convention | Example |
-|------|-----------|---------|
-| Components | PascalCase | `UserProfile.tsx` |
-| Utilities | camelCase | `formatCurrency.ts` |
-| Constants | UPPER_SNAKE | `MAX_RETRY_COUNT` |
-| Types | PascalCase | `ApiResponse` |
-| Enums | PascalCase + UPPER members | `enum Status { ACTIVE, INACTIVE }` |
-| Files | kebab-case or camelCase | `user-service.ts` |
-| Directories | kebab-case | `api-routes/` |
-
-## Anti-Patterns (NEVER DO THESE)
-- `any` type — use `unknown` and narrow with type guards
-- `console.log` for errors — use structured logger or throw
-- String concatenation in SQL/URLs — use parameterized queries and `URL` API
-- Empty catch blocks — at minimum log, ideally handle or rethrow
-- `!important` in CSS — fix the specificity instead
-- Hardcoded values — use constants, config, or environment variables
-- Barrel re-exports with side effects — causes tree-shaking failures
-- Circular imports — restructure to break the cycle
-
-## Performance Defaults
-- Use `const` over `let` — never `var`
-- Prefer `Map`/`Set` over plain objects for dynamic lookups
-- Use early returns to avoid deep nesting
-- Debounce expensive operations (search, resize, scroll handlers)
-- Lazy-load heavy modules with dynamic `import()`
-- Use `AbortController` for cancellable fetch requests

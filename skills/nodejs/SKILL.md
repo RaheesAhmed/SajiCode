@@ -1,20 +1,29 @@
 ---
-name: nodejs-patterns
-description: Build production-grade Node.js backend services with Express, Fastify, or Hono. Covers middleware architecture, stream processing, worker threads, WebSocket implementation, queue processing with BullMQ, Redis caching, structured logging, graceful shutdown, and error handling patterns. Use when building backend APIs or server-side services.
+name: nodejs
+description: "Build production-grade Node.js backend services with Express, Fastify, or Hono. Covers layered architecture, middleware patterns, Zod validation, Redis caching, WebSocket implementation, BullMQ background jobs, graceful shutdown, and structured error handling. Use when building backend APIs, server-side services, or adding WebSocket/queue features."
 ---
 
-# Node.js Backend Mastery
+# Node.js Backend Patterns
 
 ## Framework Selection
 
-| Framework | Best For | Perf | Ecosystem |
-|-----------|----------|------|-----------|
-| Express | Mature projects, huge middleware ecosystem | Good | Massive |
-| Fastify | High-performance APIs, schema validation | Excellent | Growing |
-| Hono | Edge/serverless, ultra-lightweight | Fastest | Moderate |
-| NestJS | Enterprise apps, DI-heavy architecture | Good | Large |
+| Framework | Best For | Performance |
+|-----------|----------|-------------|
+| Express | Mature projects, huge middleware ecosystem | Good |
+| Fastify | High-performance APIs, schema validation | Excellent |
+| Hono | Edge/serverless, ultra-lightweight | Fastest |
 
-## Project Architecture
+## Layered Architecture
+
+```
+Routes → Services → Repositories → Database
+  ↓          ↓
+Middleware  Events/Jobs
+```
+
+- **Routes**: Parse HTTP, validate input, call service, format response
+- **Services**: Business logic, orchestration — no database queries
+- **Repositories**: Data access only, returns typed objects
 
 ```
 src/
@@ -25,19 +34,8 @@ src/
 ├── models/           # Type definitions and schemas
 ├── lib/              # Shared utilities, clients, config
 ├── jobs/             # Background job processors
-├── events/           # Event handlers
 └── index.ts          # Server bootstrap
 ```
-
-### Layered Architecture Rule
-```
-Routes → Services → Repositories → Database
-  ↓          ↓
-Middleware  Events/Jobs
-```
-- Routes: Parse HTTP, validate input, call service, format response
-- Services: Business logic, orchestration, NO database queries
-- Repositories: Data access ONLY, returns typed objects
 
 ## Express API Pattern
 
@@ -59,32 +57,8 @@ router.post("/users",
 );
 ```
 
-### Error Handling Middleware
-```ts
-class AppError extends Error {
-  constructor(
-    public message: string,
-    public statusCode: number = 500,
-    public code: string = "INTERNAL_ERROR"
-  ) {
-    super(message);
-    this.name = "AppError";
-  }
-}
+### Validation Middleware (Zod)
 
-function errorHandler(err: Error, req: Request, res: Response, _next: NextFunction) {
-  const statusCode = err instanceof AppError ? err.statusCode : 500;
-  const code = err instanceof AppError ? err.code : "INTERNAL_ERROR";
-
-  logger.error({ err, path: req.path, method: req.method });
-
-  res.status(statusCode).json({
-    error: { message: err.message, code },
-  });
-}
-```
-
-### Validation Middleware
 ```ts
 import { ZodSchema } from "zod";
 
@@ -100,7 +74,29 @@ function validateBody(schema: ZodSchema) {
 }
 ```
 
-## Caching with Redis
+### Error Handling Middleware
+
+```ts
+class AppError extends Error {
+  constructor(
+    public message: string,
+    public statusCode: number = 500,
+    public code: string = "INTERNAL_ERROR"
+  ) {
+    super(message);
+    this.name = "AppError";
+  }
+}
+
+function errorHandler(err: Error, req: Request, res: Response, _next: NextFunction) {
+  const statusCode = err instanceof AppError ? err.statusCode : 500;
+  const code = err instanceof AppError ? err.code : "INTERNAL_ERROR";
+  logger.error({ err, path: req.path, method: req.method });
+  res.status(statusCode).json({ error: { message: err.message, code } });
+}
+```
+
+## Redis Caching
 
 ```ts
 import { createClient } from "redis";
@@ -112,13 +108,8 @@ async function cacheGet<T>(key: string): Promise<T | null> {
   return data ? JSON.parse(data) : null;
 }
 
-async function cacheSet(key: string, value: unknown, ttlSeconds: number = 300): Promise<void> {
+async function cacheSet(key: string, value: unknown, ttlSeconds = 300): Promise<void> {
   await redis.setEx(key, ttlSeconds, JSON.stringify(value));
-}
-
-async function cacheDel(pattern: string): Promise<void> {
-  const keys = await redis.keys(pattern);
-  if (keys.length > 0) await redis.del(keys);
 }
 ```
 
@@ -133,14 +124,8 @@ const clients = new Map<string, WebSocket>();
 wss.on("connection", (ws, req) => {
   const userId = authenticateWs(req);
   clients.set(userId, ws);
-
-  ws.on("message", (data) => {
-    const message = JSON.parse(data.toString());
-    handleMessage(userId, message);
-  });
-
+  ws.on("message", (data) => handleMessage(userId, JSON.parse(data.toString())));
   ws.on("close", () => clients.delete(userId));
-
   ws.on("error", (err) => logger.error("WebSocket error", { userId, err }));
 });
 
@@ -165,9 +150,7 @@ await emailQueue.add("welcome", { userId, email }, {
 });
 
 const worker = new Worker("email", async (job) => {
-  if (job.name === "welcome") {
-    await sendWelcomeEmail(job.data.email);
-  }
+  if (job.name === "welcome") await sendWelcomeEmail(job.data.email);
 }, { connection: { url: process.env.REDIS_URL }, concurrency: 5 });
 ```
 
@@ -185,13 +168,3 @@ async function gracefulShutdown(signal: string) {
 process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
 process.on("SIGINT", () => gracefulShutdown("SIGINT"));
 ```
-
-## Best Practices
-- Use async/await everywhere — never unhandled promise rejections
-- Validate ALL inputs with Zod before processing
-- Return consistent JSON: `{ data }` for success, `{ error: { message, code } }` for failure
-- Use environment variables for config — never hardcode
-- Use `helmet`, `cors`, rate limiting middleware on every API
-- Set `NODE_ENV=production` in production
-- Use worker threads for CPU-intensive tasks
-- Implement request ID tracing across all logs
