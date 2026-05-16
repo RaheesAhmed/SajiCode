@@ -302,7 +302,7 @@ Intelligent memory architecture with **70% token reduction** compared to naive f
 ├── agents/                # Per-agent structured JSON memory
 │   ├── backend-lead.json
 │   └── frontend-lead.json
-└── mcp-servers.json       # MCP server configurations
+└── mcp.json       # MCP server configurations
 ```
 
 | Layer | What | When Loaded |
@@ -368,7 +368,7 @@ SajiCode connects to [Model Context Protocol](https://modelcontextprotocol.io) s
 
 > 📖 **[Full MCP Integration Guide →](./MCP_INTEGRATION.md)**
 
-Create `.sajicode/mcp-servers.json`:
+Create `.sajicode/mcp.json`:
 
 ```json
 {

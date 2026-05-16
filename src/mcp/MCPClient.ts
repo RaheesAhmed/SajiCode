@@ -52,7 +52,7 @@ export class MCPClientManager {
   }
 
   private async loadMCPServersConfig(): Promise<Record<string, any>> {
-    const configPath = path.join(this.projectPath, ".sajicode", "mcp-servers.json");
+    const configPath = path.join(this.projectPath, ".sajicode", "mcp.json");
 
     try {
       const configContent = await fs.readFile(configPath, "utf-8");
@@ -125,9 +125,41 @@ export class MCPClientManager {
           wrappedTool.name = prefixedName;
           wrappedTool.description = `[${serverName} MCP] ${tool.description || ''}`;
           
-          // Preserve the invoke method by binding it to the original tool
+          // Wrap the invoke method with error handling and response formatting
           if (typeof tool.invoke === 'function') {
-            wrappedTool.invoke = tool.invoke.bind(tool);
+            const originalInvoke = tool.invoke.bind(tool);
+            wrappedTool.invoke = async function(input: any) {
+              try {
+                const result = await originalInvoke(input);
+                
+                // Ensure the result is properly formatted as a string
+                if (typeof result === 'string') {
+                  return result;
+                } else if (result && typeof result === 'object') {
+                  // If it's an object, stringify it properly
+                  try {
+                    return JSON.stringify(result, null, 2);
+                  } catch {
+                    return String(result);
+                  }
+                } else {
+                  return String(result);
+                }
+              } catch (error: any) {
+                // Return error as a string message instead of throwing
+                // This allows the agent to see the error and try alternative approaches
+                const errorMessage = error?.message || String(error);
+                console.error(`[MCP] Tool ${prefixedName} error:`, errorMessage);
+                
+                // Return a helpful error message that guides the agent
+                return `❌ MCP tool '${originalName}' on server '${serverName}' returned an error: ${errorMessage}\n\n` +
+                  `💡 Suggestion: This error might be recoverable. Consider:\n` +
+                  `1. Check if there are prerequisite tools that need to be called first\n` +
+                  `2. Verify the input parameters are correct\n` +
+                  `3. Try an alternative approach to accomplish the same goal\n` +
+                  `4. If this is a dependency issue, try calling other available tools`;
+              }
+            };
           }
           
           return wrappedTool;
