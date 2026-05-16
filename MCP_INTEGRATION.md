@@ -8,7 +8,7 @@ SajiCode integrates with [Model Context Protocol (MCP)](https://modelcontextprot
 
 ### 1. Create MCP Configuration
 
-Create `.sajicode/mcp-servers.json` in your project root:
+Create `.sajicode/mcp.json` in your project root:
 
 ```json
 {
@@ -363,7 +363,7 @@ main();
 **Problem:** No MCP servers shown at startup
 
 **Solutions:**
-1. Check configuration file exists: `.sajicode/mcp-servers.json`
+1. Check configuration file exists: `.sajicode/mcp.json`
 2. Verify JSON syntax is valid
 3. Check server `enabled` is not `false`
 4. Verify command is in PATH
