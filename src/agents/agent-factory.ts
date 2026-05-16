@@ -24,6 +24,11 @@ import { createSessionStateTools } from "../memory/session-state.js";
 import { createGitTools } from "../tools/git-tools.js";
 import { createFileTrackerTools } from "../tools/file-tracker.js";
 
+import { createDependencyOrderTool } from "../tools/dependency-graph.js";
+import { createCodeSearchTools } from "../tools/code-search.js";
+import { createMemoryTools } from "../tools/memory-tools.js";
+import { MCPClientManager } from "../mcp/MCPClient.js";
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface AgentSpec {
@@ -160,6 +165,11 @@ export async function createAgentFromSpec(
     memoryBlock(),
   ].filter(Boolean).join("\n");
 
+  // Initialize MCP client for domain agents
+  const mcpClient = new MCPClientManager(projectPath);
+  await mcpClient.initialize();
+  const mcpTools = await mcpClient.getTools();
+
   const tools = [
     createUpdateAgentMemoryTool(projectPath, spec.name),
     createUpdateProjectLogTool(projectPath),
@@ -168,8 +178,13 @@ export async function createAgentFromSpec(
     createContextBriefingTool(projectPath),
     ...createExperienceTools(projectPath),
     ...createSessionStateTools(projectPath),
+    ...mcpTools,
     ...createGitTools(projectPath),
     ...createFileTrackerTools(projectPath),
+   
+    createDependencyOrderTool(),
+    ...createCodeSearchTools(projectPath),
+    ...createMemoryTools(projectPath),
     // DeepAgents provides write_file, edit_file, read_file automatically via backend
     // Only need streaming execute tool for shell commands with progress events
     createStreamingExecuteTool(backend),
