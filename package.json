@@ -34,12 +34,12 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/sajicode/sajicode.git"
+    "url": "https://github.com/RaheesAhmed/SajiCode.git"
   },
   "bugs": {
-    "url": "https://github.com/sajicode/sajicode/issues"
+    "url": "https://github.com/RaheesAhmed/SajiCode/issues"
   },
-  "homepage": "https://github.com/sajicode/sajicode#readme",
+  "homepage": "https://github.com/RaheesAhmed/SajiCode#readme",
   "dependencies": {
     "@clack/prompts": "^1.0.1",
     "@inquirer/prompts": "^8.2.1",
