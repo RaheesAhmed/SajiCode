@@ -34,7 +34,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/RaheesAhmed/SajiCode.git"
+    "url": "git+https://github.com/RaheesAhmed/SajiCode.git"
   },
   "bugs": {
     "url": "https://github.com/RaheesAhmed/SajiCode/issues"
