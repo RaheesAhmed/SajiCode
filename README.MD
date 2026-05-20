@@ -2,373 +2,404 @@
   <img src="./logo.svg" width="280" alt="SajiCode" />
 </p>
 
-<h3 align="center">The AI engineering team in your terminal.</h3>
+<h3 align="center">Your AI engineering team in the terminal.</h3>
 
 <p align="center">
-  17 specialized agents · 21 expert skills · 3-layer memory · 23 security checks<br/>
-  Builds production software, not prototypes.
+  Plan work, delegate to specialist agents, edit multiple files safely, recover from errors, and ship faster.
 </p>
 
 <p align="center">
-  <a href="https://github.com/raheesahmed/sajicode/stargazers">
-    <img src="https://img.shields.io/github/stars/raheesahmed/sajicode?style=flat&color=FF6A00&labelColor=1a1a1a" alt="Stars">
-  </a>
-  <a href="https://github.com/raheesahmed/sajicode/blob/main/LICENSE">
-    <img src="https://img.shields.io/github/license/raheesahmed/sajicode?style=flat&color=666666&labelColor=1a1a1a" alt="License">
-  </a>
   <a href="https://www.npmjs.com/package/sajicode">
-    <img src="https://img.shields.io/npm/v/sajicode?style=flat&color=FF6A00&labelColor=1a1a1a" alt="npm">
+    <img src="https://img.shields.io/npm/v/sajicode?style=flat&color=FF6A00&labelColor=1a1a1a" alt="npm version">
+  </a>
+  <a href="https://github.com/RaheesAhmed/SajiCode">
+    <img src="https://img.shields.io/github/stars/RaheesAhmed/SajiCode?style=flat&color=FF6A00&labelColor=1a1a1a" alt="GitHub stars">
+  </a>
+  <a href="https://github.com/RaheesAhmed/SajiCode/blob/main/LICENSE">
+    <img src="https://img.shields.io/github/license/RaheesAhmed/SajiCode?style=flat&color=666666&labelColor=1a1a1a" alt="License">
   </a>
   <a href="https://nodejs.org">
-    <img src="https://img.shields.io/badge/node-%3E%3D18-1a1a1a?style=flat&color=43853d" alt="Node">
+    <img src="https://img.shields.io/badge/node-%3E%3D18-43853d?style=flat&labelColor=1a1a1a" alt="Node >= 18">
   </a>
 </p>
 
 <p align="center">
-  <a href="#why-sajicode">Why</a> ·
-  <a href="#quickstart">Quickstart</a> ·
-  <a href="#whatsapp-integration">WhatsApp</a> ·
-  <a href="#how-it-works">How It Works</a> ·
-  <a href="#architecture">Architecture</a> ·
+  <a href="#what-is-sajicode">What is it?</a> ·
+  <a href="#quick-start">Quick Start</a> ·
+  <a href="#how-to-use-it">How to Use</a> ·
+  <a href="#whats-new-in-v110">v1.1.0</a> ·
   <a href="#features">Features</a> ·
-  <a href="#three-layer-memory">Memory</a> ·
-  <a href="#security">Security</a> ·
-  <a href="#model-support">Models</a> ·
+  <a href="#whatsapp-channel">WhatsApp</a> ·
   <a href="#mcp-integration">MCP</a> ·
-  <a href="#contributing">Contributing</a>
-</p>
-
-<br/>
-
-<p align="center">
-  <a href="https://www.youtube.com/watch?v=nMtQVvzALiI">
-    <img src="https://img.youtube.com/vi/nMtQVvzALiI/maxresdefault.jpg" width="640" alt="SajiCode Demo">
-  </a>
+  <a href="#safety">Safety</a> ·
+  <a href="#memory">Memory</a> ·
+  <a href="#configuration">Config</a> ·
+  <a href="#for-developers">Developers</a>
 </p>
 
 ---
 
-## Why SajiCode?
+## What Is SajiCode?
 
-Every AI coding assistant today uses a **single agent** for everything. This falls apart at scale:
+SajiCode is an AI coding tool that works like a small engineering team.
 
-| Problem | Result |
-|:---|:---|
-| No specialization | The same model writes code, tests, and security reviews — equally badly |
-| Context loss | Large changes make the model forget what it just built |
-| Placeholder code | `// TODO: implement later` ships to production |
-| No autonomy | You become the project manager of your AI assistant |
+Instead of one assistant trying to do everything, SajiCode uses a **PM agent** and specialist lead agents:
 
-**SajiCode** replaces the single agent with a **distributed team of 17 specialists** — exactly how real engineering teams are structured.
+- **PM Agent** plans the work and creates context.
+- **Backend Lead** builds APIs, server logic, auth, and data handling.
+- **Frontend Lead** builds HTML, CSS, React, Next.js, and UI work.
+- **Full-Stack Lead** builds tightly connected frontend + backend features.
+- **QA Lead** writes and runs tests.
+- **Security Lead** reviews risky code, secrets, auth, and vulnerabilities.
+- **Deploy Lead** handles Docker, CI/CD, and deployment files.
+- **Review Agent** checks the final result.
 
-- **PM plans**, backend builds APIs, frontend builds UI — in parallel
-- QA writes tests and security scans vulnerabilities — after every build
-- A 3-layer judgment middleware **blocks placeholder code** before it reaches disk
-- Each agent owns a **territory** — backend cannot touch frontend files and vice versa
+The goal is simple:
+
+> Tell SajiCode what you want. It plans, delegates, builds, checks, and explains what happened.
+
+You can use it if you are:
+
+- a developer who wants a faster coding workflow
+- a founder building an MVP
+- a student learning software projects
+- a non-developer who wants to describe an app in plain English
+- a team that wants AI help with code, tests, review, and security
 
 ---
 
-## Quickstart
+## Quick Start
+
+### 1. Install
 
 ```bash
-# Install globally
 npm install -g sajicode
+```
 
-# Or run without installing
+Or run without installing:
+
+```bash
 npx sajicode
 ```
 
-```bash
-# Local model — no API key needed
-sajicode -p ollama -m llama3.1:70b
-
-# Cloud providers
-sajicode -p openai    -m gpt-4.1
-sajicode -p google    -m gemini-2.5-flash
-sajicode -p anthropic -m claude-sonnet-4-20250514
-
-# Headless mode for CI/CD
-sajicode build "Fix the login bug and write tests" --headless
-```
-
-### Environment Variables
+### 2. Open Your Project
 
 ```bash
-export OPENAI_API_KEY="sk-..."
-export GOOGLE_API_KEY="..."           # or GEMINI_API_KEY
-export ANTHROPIC_API_KEY="sk-ant-..."
-export TAVILY_API_KEY="tvly-..."      # optional — enables web search
+cd my-project
+sajicode
 ```
+
+### 3. Ask It To Build Something
+
+```text
+Build a login and signup page with a Node backend.
+Use plain HTML, CSS, and JavaScript.
+Do not install any packages.
+```
+
+SajiCode will:
+
+1. inspect your project
+2. create or update project context
+3. plan the task
+4. delegate work to the right specialist agents
+5. write files safely
+6. run checks when possible
+7. summarize what changed
 
 ---
 
-## WhatsApp Integration
+## How To Use It
 
-Send coding tasks from your phone. SajiCode connects directly to WhatsApp via WebSocket — no third-party service, no extra API key.
+Start SajiCode:
 
 ```bash
-sajicode --channels whatsapp
+sajicode
 ```
 
-On first run, a QR code appears in your terminal. Scan it with WhatsApp → **Settings → Linked Devices → Link a Device**. Auth is saved to `~/.sajicode/whatsapp-auth/` and persists across all projects.
+Then type what you want:
 
-```
-Phone (WhatsApp) → Baileys WebSocket → Channel Adapter → Agent Core → WhatsApp Reply
-```
-
-**Details:**
-- Uses [`@whiskeysockets/baileys`](https://github.com/WhiskeySockets/Baileys) — pure WebSocket, no browser, no Selenium
-- Auto-reconnects on disconnect
-- Responses are chunked to respect WhatsApp's 4096-character limit
-- Terminal and WhatsApp run side-by-side
-
-### Two Modes
-
-| Mode | Who uses it | Behavior |
-|:---|:---|:---|
-| **Admin** (default) | You, the developer | Your messages trigger coding tasks |
-| **Personal Bot** | Your contacts | AI replies to incoming messages in your style |
-
-Configure in `.sajicode/config.json`:
-
-```json
-// Admin Mode — send tasks from your phone
-{
-  "whatsapp": { "enabled": true, "mode": "admin" }
-}
-
-// Personal Bot Mode — AI replies as you
-{
-  "whatsapp": {
-    "enabled": true,
-    "mode": "personal",
-    "personalBotPrompt": "Reply like Rahees — direct, friendly, use emojis sometimes."
-  }
-}
+```text
+Create a simple expense tracker app in this folder.
+Use Node.js for the backend and plain HTML for the frontend.
+No external packages.
 ```
 
-> **Coming soon:** Discord and Telegram via the same adapter pattern.
+Other useful prompts:
+
+```text
+Fix the login bug and explain what caused it.
+```
+
+```text
+Add tests for the user service.
+```
+
+```text
+Review this project for security issues.
+```
+
+```text
+Create a Dockerfile and GitHub Actions workflow for this app.
+```
+
+### Built-In Commands
+
+Inside the SajiCode terminal:
+
+| Command | What it does |
+|:--|:--|
+| `/init` | Scan the project and create `SAJICODE.md` |
+| `/status` | Show current model, project, thread, and approval status |
+| `/undo <file>` | Restore a file from its latest SajiCode snapshot |
+| `/snapshots` | Show recent file snapshots |
+| `/help` | Show available commands |
+| `/clear` | Clear the terminal |
+| `/exit` | Quit SajiCode |
 
 ---
 
-## How It Works
+## What Makes It Different?
 
-**1 — Describe what to build**
+### PM Plans, Specialists Build
 
-```
->_ build a fullstack task manager with Express, SQLite, and a React dashboard
-```
+SajiCode's PM agent does **not** write app code directly.
 
-**2 — PM Agent architects the solution**
+The PM creates context and delegates implementation to the right lead agent. This makes the workflow easier to follow and safer for larger projects.
 
-Scans your codebase with `collect_repo_map`, produces `architecture.md` with system diagrams, API tables, and file ownership — then presents the plan before any code is written.
+### Parallel Task Graph
 
-**3 — Parallel delegation to specialists**
+SajiCode can plan work as a dependency graph.
 
-```
-PM Agent
-  ├─▶ Backend Lead   → "Build Express REST API in src/routes/, src/models/"
-  ├─▶ Frontend Lead  → "Build React dashboard in src/components/, src/pages/"
-  ├─▶ QA Lead        → "Write tests for all endpoints and components"
-  ├─▶ Security Lead  → "Audit for XSS, injection, hardcoded secrets"
-  └─▶ Review Agent   → "Final quality gate — no TODOs, no broken imports"
+Example:
+
+```text
+Backend API and Frontend UI can start together.
+QA tests wait until both are complete.
 ```
 
-**4 — Leads delegate further**
+This helps agents work faster without stepping on each other.
 
-Backend Lead spawns `api-builder` and `db-designer` concurrently. Frontend Lead spawns `component-builder` and `style-designer`. Every layer runs in parallel.
+### Multi-File Writing And Editing
 
-**5 — Production-ready output**
+Specialist agents can write or edit many files in one structured batch.
 
-Every file passes through judgment middleware (placeholder code blocked), QA testing, security audit, and final review before the task closes.
+Batch edits include:
 
----
+- path validation
+- snapshots before changes
+- rollback if something fails
+- predictive code checks
+- progress events in the UI
 
-## Architecture
+This is faster than writing one file at a time and safer than loose bulk edits.
 
-```
-                      ┌──────────────┐
-                      │   PM Agent   │
-                      └──────┬───────┘
-                             │
-          ┌────────┬─────────┼─────────┬────────┐
-          │        │         │         │        │
-     ┌────▼────┐┌──▼────┐┌───▼────┐┌───▼────┐┌──▼────┐
-     │ Backend ││ Front ││   QA   ││  Sec.  ││Deploy │
-     │  Lead   ││  Lead ││  Lead  ││  Lead  ││  Lead │
-     └────┬────┘└───┬───┘└────┬───┘└───┬────┘└───┬───┘
-          │         │         │        │         │
-       api  db   comp style  unit integ vuln  dep  docker ci
-       bldr dsgn  bldr dsgn  tstr tstr scan  aud   spec spec
-```
+### Error Recovery
 
-**1 PM + 6 Leads + 10 Sub-agents = 17 agents total**
+When something fails, SajiCode can classify the error and suggest the next move.
 
-Each agent has owned directories it can write, forbidden paths it must never touch, persistent memory across sessions, and access to 21 expert skill files.
+Examples:
 
-### The Team
+- `require is not defined in ES module scope`
+- missing imports
+- TypeScript errors
+- permission errors
+- timeouts
+- invalid tool arguments
 
-| Agent | Sub-Agents | Territory | Role |
-|:---|:---|:---|:---|
-| **PM Agent** | All Leads | Orchestration | Architecture, delegation, output validation |
-| **Backend Lead** | `api-builder`, `db-designer` | `src/routes/`, `src/models/`, `src/services/` | APIs, database, auth, server logic |
-| **Frontend Lead** | `component-builder`, `style-designer` | `src/components/`, `src/pages/`, `public/` | UI, responsive design, animations |
-| **QA Lead** | `unit-tester`, `integration-tester` | `tests/`, `__tests__/` | Coverage, TDD, edge cases |
-| **Security Lead** | `vuln-scanner`, `dep-auditor` | Security policies | OWASP scanning, dependency audit |
-| **Deploy Lead** | `docker-specialist`, `ci-specialist` | `Dockerfile`, `.github/` | Docker, CI/CD, hosting |
-| **Review Agent** | — | Read-only | Final gate — no TODOs or stubs allowed |
+It can recommend:
+
+- retry with a fix
+- delegate to another agent
+- break the task into smaller pieces
+- ask for human guidance
+
+### Predictive Code Analysis
+
+Before risky code is written or run, SajiCode can scan it for common problems:
+
+- CommonJS vs ES module mistakes
+- hardcoded secrets
+- unsafe `innerHTML`
+- plaintext password storage
+- empty catch blocks
+- placeholder code
+- risky dynamic execution
 
 ---
 
 ## Features
 
-### Judgment Middleware — Zero Placeholder Code
+SajiCode is built around practical coding work, not chat-only assistance.
 
-A 3-layer protection system wraps every tool call:
+| Feature | What it means |
+|:--|:--|
+| Specialist agents | PM, backend, frontend, full-stack, QA, security, deploy, and review roles |
+| Task graph planning | Work can be split into dependency-aware parallel tasks |
+| Multi-file batch edits | Leads can write or edit many files safely in one structured operation |
+| Predictive analysis | Code can be checked for likely runtime/security issues before it runs |
+| Error recovery | Failures are classified with recommended next actions |
+| Intelligent cache | Expensive repo/context scans are cached and invalidated when files change |
+| Project memory | SajiCode remembers project decisions, progress, and lessons |
+| Security checks | Risk scoring and command/path safety checks protect the workspace |
+| WhatsApp channel | Send tasks from your phone |
+| MCP integration | Connect external tools and data sources |
 
-1. **Risk assessment** — warns on destructive operations (`rm -rf`, `DROP TABLE`) and sensitive paths (`.env`, `credentials`)
-2. **Placeholder blocking** — blocks `write_file` if content contains `TODO`, `FIXME`, empty function bodies, or stub implementations. Agents must write real code or fail
-3. **Loop detection** — breaks infinite loops when an agent calls the same tool identically 3+ times
+### Codebase Intelligence
 
-### 23-Check Security System
+SajiCode uses `collect_repo_map` to build a compact symbol-level map of your project.
 
-Three gates on every shell command before execution:
+It helps agents understand:
 
-**Gate 1 — Pattern Detection** (23 regex checks)
-- Destructive: `rm -rf`, `mkfs`, `truncate`, `shred`, partition tools
-- Exfiltration: `curl POST`, `wget POST`, `nc -l`, SSH tunnels
-- Privilege: `sudo`, `chmod +s`, `chown root`
-- System: `crontab`, `systemctl`, `iptables`, `/etc/hosts`
-- Execution: `eval`, download-pipe patterns, base64 decode
+- important files
+- exported functions
+- classes and interfaces
+- project structure
+- likely tech stack
 
-**Gate 2 — Context Analysis**
-- Command chaining (`&&`, `||`, `;`) and piping
-- Working directory (sensitive path detection)
-- Recent command history (repeated dangerous patterns)
+This avoids reading every file one-by-one and keeps context smaller.
 
-**Gate 3 — Risk Scoring** (0–100)
+### Headless And CI Mode
 
-| Score | Action |
-|:---|:---|
-| 0–40 | Auto-approved |
-| 41–60 | Logged, allowed |
-| 61–80 | Requires HITL approval |
-| 81–100 | Blocked immediately |
+You can run SajiCode without the interactive UI:
 
 ```bash
-npm install express          # ✅ Auto-approved (score: 12)
-rm -rf node_modules          # ⚠️  Logged but allowed (score: 55)
-rm -rf / --no-preserve-root  # 🛑 Blocked (score: 98)
+sajicode build "Review this project and write missing tests" --headless
 ```
 
-See [`SECURITY_CHECKS.md`](./SECURITY_CHECKS.md) for all 23 checks.
+Useful for:
 
-### Human-in-the-Loop (HITL)
+- CI checks
+- automated reviews
+- test generation
+- security audits
+- batch maintenance tasks
 
-Optional approval system for shell commands and file deletions:
+### Expert Skills
+
+SajiCode agents can use skill files for specialized work.
+
+Examples of skill areas:
+
+- Node.js APIs
+- frontend design
+- Next.js
+- database design
+- testing
+- security
+- DevOps
+- AI/RAG systems
+- MCP servers
+- mobile apps
+- performance optimization
+
+Agents load only the skills they need for the current task.
+
+---
+
+## What's New In v1.1.0
+
+SajiCode v1.1.0 is a major foundation release.
+
+New in this version:
+
+- dependency-aware task graph
+- smarter PM delegation workflow
+- cleaner multi-agent terminal UI
+- intelligent cache for repo and context scans
+- error recovery system
+- predictive code analysis
+- multi-file batch writing/editing
+- rollback-safe file changes
+- stronger PM guardrails
+
+This release makes SajiCode faster, clearer, and safer.
+
+---
+
+## WhatsApp Channel
+
+SajiCode can receive tasks from WhatsApp, so you can ask it to work while away from your keyboard.
+
+Start with:
+
+```bash
+sajicode --channels whatsapp
+```
+
+On first run, SajiCode shows a QR code in your terminal.
+
+Scan it from WhatsApp:
+
+```text
+WhatsApp -> Settings -> Linked Devices -> Link a Device
+```
+
+How it works:
+
+```text
+Phone -> WhatsApp WebSocket -> SajiCode channel router -> Agent team -> WhatsApp reply
+```
+
+Details:
+
+- uses `@whiskeysockets/baileys`
+- no browser automation
+- no Selenium
+- no extra WhatsApp API key
+- reconnects automatically
+- long replies are split into WhatsApp-safe chunks
+- terminal and WhatsApp can run side-by-side
+
+### WhatsApp Modes
+
+| Mode | Use case | Behavior |
+|:--|:--|:--|
+| `admin` | You send coding tasks from your phone | SajiCode treats your messages as project tasks |
+| `personal` | AI replies to contacts in your style | SajiCode acts as a personal WhatsApp bot |
+
+Example `.sajicode/config.json`:
 
 ```json
 {
-  "humanInTheLoop": {
+  "whatsapp": {
     "enabled": true,
-    "tools": {
-      "execute":     { "allowedDecisions": ["approve", "edit", "reject"] },
-      "delete_file": { "allowedDecisions": ["approve", "reject"] }
-    },
-    "allowedCommands": ["npm install", "npm run", "mkdir", "node "]
+    "mode": "admin"
   }
 }
 ```
 
-Safe commands are auto-approved. Everything else requires explicit confirmation.
+Personal bot mode:
 
-### Three-Layer Memory System
-
-Intelligent memory architecture with **70% token reduction** compared to naive full-context loading:
-
+```json
+{
+  "whatsapp": {
+    "enabled": true,
+    "mode": "personal",
+    "personalBotPrompt": "Reply in a friendly, direct style."
+  }
+}
 ```
-.sajicode/
-├── config.json            # Model, HITL, and risk settings
-├── architecture.md        # Current project architecture plan
-├── whats_done.md          # Shared team log — append-only
-├── memories/
-│   ├── pointer-index.txt  # Layer 1: Always loaded (150-char summaries)
-│   ├── topics/            # Layer 2: On-demand detailed knowledge
-│   │   ├── api-design.md
-│   │   ├── database-schema.md
-│   │   └── frontend-patterns.md
-│   └── transcripts/       # Layer 3: Search-only raw history
-│       └── 2026-04-23.log
-├── agents/                # Per-agent structured JSON memory
-│   ├── backend-lead.json
-│   └── frontend-lead.json
-└── mcp.json       # MCP server configurations
-```
-
-| Layer | What | When Loaded |
-|:---|:---|:---|
-| **Layer 1** — Pointer Index | 150-char topic summaries | Always |
-| **Layer 2** — Topic Files | Full knowledge per topic | On-demand via `read_topic()` |
-| **Layer 3** — Transcripts | Raw conversation history | Search-only via `search_transcripts()` |
-
-See [`MEMORY_SYSTEM.md`](./MEMORY_SYSTEM.md) for complete documentation.
-
-### Multi-Provider LLM Support
-
-| Provider | Flag | Models |
-|:---|:---|:---|
-| Ollama (local) | `-p ollama` | `llama3.1:70b`, `deepseek-v3.1:671b-cloud` |
-| OpenAI | `-p openai` | `gpt-4.1`, `gpt-4o` |
-| Google | `-p google` | `gemini-2.5-flash`, `gemini-2.5-pro` |
-| Anthropic | `-p anthropic` | `claude-sonnet-4-20250514` |
-
-### Codebase Intelligence
-
-`collect_repo_map` scans your entire project and extracts function, class, and interface signatures across **7 languages** (TypeScript, JavaScript, Python, Go, Java, Rust, Ruby). Agents get a ~50-token condensed map per file instead of loading 500+ raw tokens.
-
-### Headless & CI/CD Mode
-
-SajiCode runs fully unattended in deployment pipelines. Use `--headless` to trigger agents for test generation, code review, or security audits inside GitHub Actions. Pre- and post-action hooks integrate with existing build systems.
-
----
-
-## 21 Expert Skills
-
-Skills are modular knowledge files loaded on-demand via progressive disclosure — agents read only what the current task requires.
-
-| Category | Skill | Capability |
-|:---|:---|:---|
-| **Core** | `superpowers` | Engineering workflow, multi-file refactoring, code quality |
-| | `debugger` | Error analysis, git bisect, memory profiling |
-| | `web-research` | Package evaluation, technology comparison |
-| **Full-Stack** | `fullstack-app-generator` | Framework selection, auth, schema, deployment |
-| | `api-architect` | REST/GraphQL, OAuth/JWT, webhooks, rate limiting |
-| | `nodejs` | Express/Fastify/Hono, Redis, WebSockets, BullMQ |
-| | `nextjs` | App Router, server actions, ISR/SSG/SSR |
-| | `python-engineer` | FastAPI, pytest, Typer CLI, pandas |
-| **Frontend** | `frontend-design` | Design systems, animation, accessibility |
-| | `shadcn-ui` | Forms, data tables, theming, composition |
-| | `styling` | CSS architecture, design tokens, container queries |
-| | `3d-web-experience` | Three.js, React Three Fiber, scroll-driven 3D |
-| **Infrastructure** | `database` | Prisma, Drizzle, query optimization, N+1 prevention |
-| | `devops` | Docker, GitHub Actions, Vercel/AWS, monitoring |
-| | `security` | OWASP Top 10, auth, CSP headers, secrets management |
-| | `testing` | Unit/integration/E2E (Playwright), mocking, CI config |
-| | `performance-optimizer` | Core Web Vitals, bundle analysis, memory leak detection |
-| **Specialized** | `ai-engineer` | LangGraph agents, RAG pipelines, prompt engineering |
-| | `architect` | System design, CQRS, event-driven, ADR templates |
-| | `mcp-server` | MCP tools, resources, prompts, transports |
-| | `mobile-app` | React Native, Expo Router, offline-first, push notifications |
 
 ---
 
 ## MCP Integration
 
-SajiCode connects to [Model Context Protocol](https://modelcontextprotocol.io) servers, giving agents access to external tools and data sources.
+SajiCode supports the Model Context Protocol, so agents can use external tools and data sources.
 
-> 📖 **[Full MCP Integration Guide →](./MCP_INTEGRATION.md)**
+Full guide:
 
-Create `.sajicode/mcp.json`:
+```text
+MCP_INTEGRATION.md
+```
+
+Create:
+
+```text
+.sajicode/mcp.json
+```
+
+Example:
 
 ```json
 {
@@ -387,113 +418,296 @@ Create `.sajicode/mcp.json`:
 }
 ```
 
-`{{projectPath}}` is replaced automatically with your project's absolute path. MCP tools are injected into the PM agent and available immediately.
+`{{projectPath}}` is replaced automatically with the current project path.
+
+MCP can be used for:
+
+- database access
+- repo intelligence
+- design tools
+- documentation search
+- internal APIs
+- custom business tools
+
+When MCP servers are configured, their tools are loaded into the agent system automatically.
 
 ---
 
-## CLI Reference
+## Safety
 
-### Commands
+SajiCode is designed to be careful by default.
 
-| Command | Description |
-|:---|:---|
-| `/init` | Scan project and generate `SAJICODE.md` context file |
-| `/status` | Show session info — thread, model, context, HITL status |
-| `/undo <file>` | Restore the last agent-modified file from snapshot |
-| `/snapshots` | List recent file snapshots |
-| `/help` | List all available commands |
-| `/clear` | Clear the terminal |
-| `/exit` | Shut down all agents and MCP connections |
+### PM Guardrails
 
-### Flags
+The PM agent can create planning and context files, but it cannot write implementation files directly.
 
-```bash
-sajicode [options]
+That means the PM should not create:
 
-  -p, --provider <name>   LLM provider: ollama | openai | google | anthropic
-  -m, --model <name>      Model name
-  -c, --channels <list>   Comma-separated channels to enable (e.g. whatsapp)
-  -H, --headless          Headless mode — no UI, ideal for CI/CD
+- `.js`
+- `.ts`
+- `.html`
+- `.css`
+- config files
+- backend files
+- frontend files
+- test files
+
+Specialist agents do that work.
+
+### File Safety
+
+Multi-file edits:
+
+- stay inside your project folder
+- block protected paths like `.git`, `node_modules`, `dist`, and real `.env` files
+- snapshot existing files
+- roll back if the batch fails
+
+### Shell Safety
+
+SajiCode checks shell commands before running them.
+
+High-risk commands can be warned, blocked, or sent for approval depending on your config.
+
+The security layer checks for patterns such as:
+
+- destructive deletion
+- dangerous chmod/chown
+- suspicious network exfiltration
+- shell chaining
+- secret paths
+- system-level commands
+- repeated risky commands
+
+See:
+
+```text
+SECURITY_CHECKS.md
 ```
 
-### Memory Tools (Available to Agents)
+### Human Approval
 
-| Tool | Purpose |
-|:---|:---|
-| `read_memory_index` | View all available topics (Layer 1) |
-| `read_topic(name)` | Load detailed topic knowledge (Layer 2) |
-| `write_memory_topic(topic, content, summary)` | Save new knowledge with 150-char summary |
-| `search_transcripts(pattern)` | Grep raw history (Layer 3) |
-| `append_transcript(content)` | Log to daily transcript |
-| `transcript_stats` | View transcript file sizes |
+You can enable human-in-the-loop approval for commands and risky actions.
+
+Example `.sajicode/config.json`:
+
+```json
+{
+  "humanInTheLoop": {
+    "enabled": true,
+    "tools": {
+      "execute": {
+        "allowedDecisions": ["approve", "edit", "reject"]
+      }
+    },
+    "allowedCommands": ["npm run", "node ", "mkdir"]
+  }
+}
+```
+
+---
+
+## Memory
+
+SajiCode uses project memory so agents do not start from zero every time.
+
+Memory lives under:
+
+```text
+.sajicode/
+```
+
+Important files and folders:
+
+```text
+.sajicode/
+├── config.json
+├── active_context.md
+├── Plan.md
+├── Architecture.md
+├── Whats_done.md
+├── experiences.json
+├── memories/
+├── transcripts/
+└── snapshots/
+```
+
+### Three-Layer Memory
+
+| Layer | Purpose |
+|:--|:--|
+| Pointer index | Small summaries that are always loaded |
+| Topic files | Detailed project knowledge loaded only when needed |
+| Transcripts | Searchable history for past work and decisions |
+
+### Experience Replay
+
+Agents can record lessons from successes and failures.
+
+Examples:
+
+- package quirks
+- build errors
+- module-system mistakes
+- security findings
+- useful implementation patterns
+
+Later agents can search those lessons before starting similar work.
+
+---
+
+## Configuration
+
+SajiCode stores project settings in:
+
+```text
+.sajicode/config.json
+```
+
+### Choose A Model
+
+Run with a model provider:
+
+```bash
+sajicode -p openai -m gpt-4.1
+```
+
+```bash
+sajicode -p google -m gemini-2.5-flash
+```
+
+```bash
+sajicode -p anthropic -m claude-sonnet-4-20250514
+```
+
+```bash
+sajicode -p ollama -m llama3.1:70b
+```
+
+### API Keys
+
+Set only the keys for the provider you use:
+
+```bash
+OPENAI_API_KEY="..."
+GOOGLE_API_KEY="..."
+GEMINI_API_KEY="..."
+ANTHROPIC_API_KEY="..."
+TAVILY_API_KEY="..."
+```
+
+`TAVILY_API_KEY` is optional and enables web search.
+
+---
+
+## For Non-Developers
+
+You do not need to know exact file names.
+
+Good prompts:
+
+```text
+Build a simple website for my dental clinic.
+It should have home, services, booking, and contact sections.
+Make it mobile friendly.
+```
+
+```text
+Create a small app where I can add customers and mark payments as paid.
+Use simple local storage. Make it easy to run.
+```
+
+```text
+Explain this project to me in simple language and tell me how to start it.
+```
+
+Tips:
+
+- Tell SajiCode the folder where you want the app.
+- Say if you do not want packages installed.
+- Say if the app is for demo, learning, or production.
+- Ask it to explain the result at the end.
+
+---
+
+## For Developers
+
+Clone and build locally:
+
+```bash
+git clone https://github.com/RaheesAhmed/SajiCode.git
+cd SajiCode
+npm install
+npm run build
+node dist/index.js
+```
+
+Run from source:
+
+```bash
+npm run dev
+```
+
+Run checks:
+
+```bash
+npm run build
+npm test
+```
+
+### Useful Scripts
+
+| Script | What it does |
+|:--|:--|
+| `npm run build` | Compile TypeScript |
+| `npm run dev` | Run from `src/index.ts` |
+| `npm start` | Run compiled `dist/index.js` |
+| `npm test` | Run Jest |
+| `npm run version:patch` | Bump patch version, push commit and tag |
+| `npm run version:minor` | Bump minor version, push commit and tag |
 
 ---
 
 ## Project Structure
 
-```
+```text
 src/
-├── index.ts                  # REPL entrypoint, HITL handling, stream processing
-├── agents/
-│   ├── index.ts              # createSajiCode() — main agent factory
-│   ├── agent-factory.ts      # Dynamic agent creation from AgentSpec presets
-│   ├── domain-heads.ts       # Lead agent wrappers
-│   ├── context.ts            # Project context and memory loading
-│   ├── judgment.ts           # 3-layer protection middleware
-│   └── onboarding.ts         # Interactive project setup
-├── channels/
-│   ├── channel.ts            # Unified ChannelAdapter interface
-│   ├── whatsapp.ts           # WhatsApp adapter (Baileys)
-│   └── router.ts             # Routes channel messages → agent core
-├── cli/
-│   ├── renderer.ts           # StreamRenderer — terminal UI with markdown
-│   ├── index.ts              # Commander CLI (build, init, audit)
-│   └── progress.ts           # Progress bar tracking
-├── prompts/
-│   ├── pm.ts                 # PM system prompt
-│   └── specialists.ts        # Domain lead prompts
-├── llms/
-│   └── provider.ts           # Multi-provider LLM factory
-├── mcp/
-│   └── MCPClient.ts          # MCP server connection manager
-├── memory/
-│   └── agent-memory.ts       # Structured JSON agent memory
-├── tools/
-│   ├── context-tools.ts      # LangChain context, memory, and log tools
-│   ├── repo-map.ts           # Codebase symbol scanner (7 languages)
-│   └── web-search.ts         # Tavily web search
-├── types/
-│   └── config.ts             # TypeScript types, AgentRole, icons, labels
-└── utils/
-    ├── platform.ts           # OS detection and platform-specific prompts
-    └── skills.ts             # Skill auto-discovery
+├── agents/       # PM, specialist agents, task graph, recovery, prediction
+├── cache/        # intelligent cache for expensive scans
+├── channels/     # terminal, WhatsApp, future channels
+├── cli/          # terminal renderer and CLI
+├── config/       # project config loading
+├── llms/         # model provider support
+├── mcp/          # MCP integration
+├── memory/       # project memory and experience replay
+├── prompts/      # PM and specialist prompts
+├── tools/        # repo map, context, multi-file editor, git, search
+├── types/        # shared TypeScript types
+└── utils/        # platform and skill helpers
 ```
 
 ---
 
-## Contributing
+## Roadmap
 
-```bash
-git clone https://github.com/raheesahmed/sajicode.git
-cd sajicode
-npm install
-npm run build
-```
+Planned improvements:
 
-**Workflow:**
-1. Edit TypeScript in `src/`
-2. `npm run build` to compile
-3. `node dist/index.js` to test
-4. Add new skills in `skills/<name>/SKILL.md`
-
-PRs for new skills, LLM providers, and agent improvements are welcome.
+- direct agent-to-agent message bus
+- richer visual progress dashboard
+- semantic memory search
+- code intelligence and test generation
+- visual architecture diagrams
+- VS Code extension
+- more channel integrations
 
 ---
 
 ## License
 
-MIT — see [LICENSE](./LICENSE)
+MIT
+
+---
 
 <p align="center">
-  Built by <a href="https://github.com/raheesahmed">Rahees Ahmed</a>
+  Built by <a href="https://github.com/RaheesAhmed">Rahees Ahmed</a>
 </p>
