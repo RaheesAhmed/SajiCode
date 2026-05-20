@@ -2,7 +2,7 @@
   <img src="./logo.svg" width="280" alt="SajiCode" />
 </p>
 
-<h3 align="center">Your AI engineering team in the terminal.</h3>
+<h3 align="center">AI engineering team in Your terminal.</h3>
 
 <p align="center">
   Plan work, delegate to specialist agents, edit multiple files safely, recover from errors, and ship faster.
