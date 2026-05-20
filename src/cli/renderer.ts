@@ -489,6 +489,36 @@ export class StreamRenderer {
         }
         return;
       }
+
+      if (type?.startsWith("multi_file_batch")) {
+        const count = typeof data.count === "number" ? data.count : undefined;
+        const current = typeof data.current === "number" ? data.current : undefined;
+        const total = typeof data.total === "number" ? data.total : undefined;
+        const filePath = String(data.file_path ?? "");
+        const operation = String(data.operation ?? "");
+
+        switch (type) {
+          case "multi_file_batch_start":
+            console.log(`  ${CY("┌─")} ${CY.bold("Multi-file batch")} ${GY(count !== undefined ? `${count} operation(s)` : "starting")}`);
+            if (message) console.log(`  ${CY("│")} ${GY(message)}`);
+            break;
+
+          case "multi_file_batch_progress": {
+            const progress = current !== undefined && total !== undefined ? `${current}/${total}` : "working";
+            console.log(`  ${CY("│")} ${YL("●")} ${GY(progress)} ${WH(operation)} ${GY(filePath)}`);
+            break;
+          }
+
+          case "multi_file_batch_complete":
+            console.log(`  ${CY("└─")} ${G("✓")} ${GY(message || `Applied ${count ?? 0} operation(s)`)}`);
+            break;
+
+          case "multi_file_batch_error":
+            console.log(`  ${CY("└─")} ${RD("✗")} ${RD(error || message || "Batch failed and rolled back")}`);
+            break;
+        }
+        return;
+      }
       
       // File edit events
       if (type?.startsWith("file_edit")) {

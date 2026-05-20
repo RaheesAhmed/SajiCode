@@ -28,6 +28,7 @@ import { createDependencyOrderTool } from "../tools/dependency-graph.js";
 import { createCodeSearchTools } from "../tools/code-search.js";
 import { createMemoryTools } from "../tools/memory-tools.js";
 import { createIntelligenceTools } from "../tools/intelligence-tools.js";
+import { createMultiFileEditorTools } from "../tools/multi-file-editor.js";
 import { MCPClientManager } from "../mcp/MCPClient.js";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -93,10 +94,9 @@ EFFICIENCY RULES:
   → Config files (.json, .md, .yml) have no size limit
 
 PARALLEL WORK STRATEGY (for 3+ files):
-  → If you have 3+ files to create, work on them in PARALLEL batches
-  → Use write_file for multiple files in the same response
-  → Example: Create component.tsx, styles.css, and types.ts all at once
-  → This is MUCH faster than sequential file creation
+  → For 2+ file changes, prefer apply_file_batch over separate write_file/edit_file calls.
+  → Use preview_file_batch first for risky/auth/server or 4+ file batches.
+  → apply_file_batch snapshots files, validates paths, runs predictive checks, and rolls back on failure.
 
 YOUR WORKFLOW:
 
@@ -120,7 +120,7 @@ YOUR WORKFLOW:
       → Write it immediately with write_file
     
     SMALL BATCH (2-3 files):
-      → Write all files in ONE response using multiple write_file calls
+      → Use apply_file_batch for all files in one operation
       → This is the FASTEST approach
     
     LARGE BATCH (4+ files):
@@ -139,6 +139,7 @@ YOUR WORKFLOW:
 
 CRITICAL RULES:
   → Write files under 300 lines directly (you'll be blocked if larger)
+  → Prefer apply_file_batch for multi-file work
   → NEVER delegate to sub-agents — you ARE the specialist
   → Batch multiple files together when possible for speed
   → ALWAYS call write_artifact after completing work
@@ -191,6 +192,7 @@ export async function createAgentFromSpec(
     ...createCodeSearchTools(projectPath),
     ...createMemoryTools(projectPath),
     ...createIntelligenceTools(projectPath),
+    ...createMultiFileEditorTools(projectPath),
     // DeepAgents provides write_file, edit_file, read_file automatically via backend
     // Only need streaming execute tool for shell commands with progress events
     

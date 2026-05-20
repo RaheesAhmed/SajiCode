@@ -1,0 +1,433 @@
+import { tool, type ToolRuntime } from "@langchain/core/tools";
+import { z } from "zod";
+import fs from "fs/promises";
+import path from "path";
+import { PredictiveAnalyzer } from "../agents/predictive-analysis.js";
+import { getSnapshotIndex, saveSnapshotIndex } from "./file-tracker.js";
+
+type FileOperationType = "write" | "replace" | "append" | "prepend";
+
+interface FileOperation {
+  type: FileOperationType;
+  filePath: string;
+  content?: string;
+  oldString?: string;
+  newString?: string;
+  replaceAll?: boolean;
+  overwrite?: boolean;
+}
+
+interface PreparedOperation extends FileOperation {
+  absolutePath: string;
+  relativePath: string;
+}
+
+interface FileBackup {
+  absolutePath: string;
+  relativePath: string;
+  existed: boolean;
+  content: string;
+}
+
+interface BatchPlan {
+  operations: PreparedOperation[];
+  warnings: string[];
+  predictedIssues: Array<{
+    filePath: string;
+    severity: string;
+    category: string;
+    line?: number;
+    message: string;
+    suggestion: string;
+  }>;
+}
+
+const PROTECTED_SEGMENTS = new Set([
+  ".git",
+  "node_modules",
+  "dist",
+  "build",
+  "coverage",
+  ".next",
+  ".nuxt",
+  ".cache",
+  ".turbo",
+]);
+
+const PROTECTED_FILE_NAMES = new Set([
+  ".env",
+  ".env.local",
+  ".env.production",
+  ".env.development",
+]);
+
+const SOURCE_EXTENSIONS = new Set([
+  ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs",
+  ".py", ".go", ".rs", ".java", ".rb", ".php",
+  ".css", ".scss", ".less", ".vue", ".svelte", ".html",
+]);
+
+function normalizeRelativePath(projectPath: string, filePath: string): { absolutePath: string; relativePath: string } {
+  const absoluteProject = path.resolve(projectPath);
+  const absolutePath = path.resolve(path.isAbsolute(filePath) ? filePath : path.join(projectPath, filePath));
+  const relativePath = path.relative(absoluteProject, absolutePath).replace(/\\/g, "/");
+
+  if (relativePath === "" || relativePath.startsWith("..") || path.isAbsolute(relativePath)) {
+    throw new Error(`Path escapes project root: ${filePath}`);
+  }
+
+  const segments = relativePath.split("/");
+  for (const segment of segments) {
+    if (PROTECTED_SEGMENTS.has(segment)) {
+      throw new Error(`Protected path segment "${segment}" is not editable by batch tools: ${filePath}`);
+    }
+  }
+
+  if (PROTECTED_FILE_NAMES.has(path.basename(relativePath))) {
+    throw new Error(`Protected secret file cannot be edited by batch tools: ${filePath}`);
+  }
+
+  return { absolutePath, relativePath };
+}
+
+function operationLineCount(operation: FileOperation): number {
+  const content = operation.type === "replace" ? operation.newString ?? "" : operation.content ?? "";
+  return content.split("\n").length;
+}
+
+function validateOperationShape(operation: FileOperation): void {
+  if (operation.type === "write") {
+    if (operation.content === undefined) throw new Error(`write operation for ${operation.filePath} requires content`);
+    return;
+  }
+  if (operation.type === "replace") {
+    if (!operation.oldString) throw new Error(`replace operation for ${operation.filePath} requires oldString`);
+    if (operation.newString === undefined) throw new Error(`replace operation for ${operation.filePath} requires newString`);
+    return;
+  }
+  if (operation.type === "append" || operation.type === "prepend") {
+    if (operation.content === undefined) throw new Error(`${operation.type} operation for ${operation.filePath} requires content`);
+  }
+}
+
+async function readIfExists(absolutePath: string): Promise<{ existed: boolean; content: string }> {
+  try {
+    return { existed: true, content: await fs.readFile(absolutePath, "utf-8") };
+  } catch (error: any) {
+    if (error?.code === "ENOENT") return { existed: false, content: "" };
+    throw error;
+  }
+}
+
+async function computeNextContent(operation: PreparedOperation): Promise<string> {
+  const current = await readIfExists(operation.absolutePath);
+
+  switch (operation.type) {
+    case "write":
+      if (current.existed && operation.overwrite === false) {
+        throw new Error(`Refusing to overwrite existing file: ${operation.relativePath}`);
+      }
+      return operation.content ?? "";
+    case "replace": {
+      if (!current.existed) throw new Error(`Cannot replace text in missing file: ${operation.relativePath}`);
+      const oldString = operation.oldString ?? "";
+      const newString = operation.newString ?? "";
+      if (!current.content.includes(oldString)) {
+        throw new Error(`oldString not found in ${operation.relativePath}`);
+      }
+      return operation.replaceAll
+        ? current.content.split(oldString).join(newString)
+        : current.content.replace(oldString, newString);
+    }
+    case "append":
+      return current.content + (operation.content ?? "");
+    case "prepend":
+      return (operation.content ?? "") + current.content;
+  }
+}
+
+async function saveBatchSnapshot(projectPath: string, backups: FileBackup[], agentName: string): Promise<string> {
+  const batchId = `batch-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const snapshotRoot = path.join(projectPath, ".sajicode", "snapshots");
+  await fs.mkdir(snapshotRoot, { recursive: true });
+
+  const index = await getSnapshotIndex(projectPath);
+  for (const backup of backups.filter((item) => item.existed)) {
+    const safeName = backup.relativePath.replace(/[/\\:]/g, "_").replace(/^_/, "");
+    const snapshotFileName = `${Date.now()}_${batchId}_${safeName}`;
+    await fs.writeFile(path.join(snapshotRoot, snapshotFileName), backup.content, "utf-8");
+    index.push({
+      filePath: backup.relativePath,
+      content: snapshotFileName,
+      timestamp: new Date().toISOString(),
+      agentName,
+    });
+  }
+
+  await saveSnapshotIndex(projectPath, index);
+  return batchId;
+}
+
+async function restoreBackups(backups: FileBackup[]): Promise<void> {
+  for (const backup of [...backups].reverse()) {
+    if (backup.existed) {
+      await fs.mkdir(path.dirname(backup.absolutePath), { recursive: true });
+      await fs.writeFile(backup.absolutePath, backup.content, "utf-8");
+    } else {
+      try {
+        await fs.unlink(backup.absolutePath);
+      } catch (error: any) {
+        if (error?.code !== "ENOENT") throw error;
+      }
+    }
+  }
+}
+
+async function prepareBatch(
+  projectPath: string,
+  operations: FileOperation[],
+  options: { runPredictiveAnalysis: boolean; allowHighRisk: boolean },
+): Promise<BatchPlan> {
+  if (operations.length === 0) throw new Error("At least one file operation is required");
+  if (operations.length > 30) throw new Error("Batch limit is 30 file operations");
+
+  const analyzer = new PredictiveAnalyzer();
+  const warnings: string[] = [];
+  const predictedIssues: BatchPlan["predictedIssues"] = [];
+  const prepared = operations.map((operation) => {
+    validateOperationShape(operation);
+    const normalized = normalizeRelativePath(projectPath, operation.filePath);
+    const lines = operationLineCount(operation);
+    const ext = path.extname(normalized.relativePath).toLowerCase();
+
+    if (SOURCE_EXTENSIONS.has(ext) && lines >= 300) {
+      throw new Error(`File ${normalized.relativePath} has ${lines} lines. Split files at under 300 lines.`);
+    }
+
+    return {
+      ...operation,
+      absolutePath: normalized.absolutePath,
+      relativePath: normalized.relativePath,
+    };
+  });
+
+  const seen = new Set<string>();
+  for (const operation of prepared) {
+    if (operation.type === "write" && seen.has(operation.relativePath)) {
+      warnings.push(`Multiple operations target ${operation.relativePath}; order will be preserved.`);
+    }
+    seen.add(operation.relativePath);
+  }
+
+  if (options.runPredictiveAnalysis) {
+    for (const operation of prepared) {
+      if (operation.type !== "write") continue;
+      const content = operation.content ?? "";
+      const ext = path.extname(operation.relativePath).toLowerCase();
+      if (!SOURCE_EXTENSIONS.has(ext)) continue;
+
+      const issues = await analyzer.analyzeBeforeExecution({
+        code: content,
+        filePath: operation.relativePath,
+        projectPath,
+      });
+
+      for (const issue of issues) {
+        predictedIssues.push({
+          filePath: operation.relativePath,
+          severity: issue.severity,
+          category: issue.category,
+          line: issue.line,
+          message: issue.message,
+          suggestion: issue.suggestion,
+        });
+      }
+    }
+
+    const highIssues = predictedIssues.filter((issue) => issue.severity === "high");
+    if (highIssues.length > 0 && !options.allowHighRisk) {
+      const first = highIssues[0]!;
+      throw new Error(
+        `Predictive analysis blocked batch: ${first.filePath} has high-risk ${first.category}. ` +
+        `${first.message} Fix it or set allowHighRisk with a clear rationale.`
+      );
+    }
+  }
+
+  return { operations: prepared, warnings, predictedIssues };
+}
+
+function formatPlan(plan: BatchPlan): string {
+  const lines = [
+    `Batch plan: ${plan.operations.length} operation${plan.operations.length === 1 ? "" : "s"}`,
+    "",
+  ];
+
+  for (const operation of plan.operations) {
+    lines.push(`- ${operation.type}: ${operation.relativePath}`);
+  }
+
+  if (plan.warnings.length > 0) {
+    lines.push("", "Warnings:");
+    for (const warning of plan.warnings) lines.push(`- ${warning}`);
+  }
+
+  if (plan.predictedIssues.length > 0) {
+    lines.push("", "Predictive issues:");
+    for (const issue of plan.predictedIssues.slice(0, 12)) {
+      const location = issue.line ? `:${issue.line}` : "";
+      lines.push(`- [${issue.severity}] ${issue.filePath}${location} ${issue.category}: ${issue.message}`);
+    }
+    if (plan.predictedIssues.length > 12) {
+      lines.push(`- ... ${plan.predictedIssues.length - 12} more issue(s)`);
+    }
+  }
+
+  return lines.join("\n");
+}
+
+export function createMultiFileEditorTools(projectPath: string) {
+  const operationSchema = z.object({
+    type: z.enum(["write", "replace", "append", "prepend"]),
+    filePath: z.string().describe("Project-relative or absolute file path inside the project"),
+    content: z.string().optional().describe("Content for write/append/prepend"),
+    oldString: z.string().optional().describe("Exact text to replace for replace operations"),
+    newString: z.string().optional().describe("Replacement text for replace operations"),
+    replaceAll: z.boolean().optional().describe("Replace all occurrences for replace operations"),
+    overwrite: z.boolean().optional().describe("For write operations, false refuses to overwrite existing files"),
+  });
+
+  return [
+    tool(
+      async (input: {
+        operations: FileOperation[];
+        runPredictiveAnalysis?: boolean;
+        allowHighRisk?: boolean;
+      }) => {
+        const plan = await prepareBatch(projectPath, input.operations, {
+          runPredictiveAnalysis: input.runPredictiveAnalysis ?? true,
+          allowHighRisk: input.allowHighRisk ?? false,
+        });
+        return formatPlan(plan);
+      },
+      {
+        name: "preview_file_batch",
+        description:
+          "Validate and preview a multi-file write/edit batch without changing files. Use before large or risky batches.",
+        schema: z.object({
+          operations: z.array(operationSchema).describe("File operations to preview"),
+          runPredictiveAnalysis: z.boolean().optional().describe("Run predictive code checks on write operations (default true)"),
+          allowHighRisk: z.boolean().optional().describe("Allow high-risk predictive findings in preview (default false)"),
+        }),
+      },
+    ),
+    tool(
+      async (
+        input: {
+          operations: FileOperation[];
+          agentName: string;
+          runPredictiveAnalysis?: boolean;
+          allowHighRisk?: boolean;
+          highRiskRationale?: string;
+        },
+        runtime: ToolRuntime,
+      ) => {
+        if ((input.allowHighRisk ?? false) && !input.highRiskRationale?.trim()) {
+          throw new Error("highRiskRationale is required when allowHighRisk is true");
+        }
+
+        const plan = await prepareBatch(projectPath, input.operations, {
+          runPredictiveAnalysis: input.runPredictiveAnalysis ?? true,
+          allowHighRisk: input.allowHighRisk ?? false,
+        });
+
+        const writer = runtime.writer;
+        writer?.({
+          type: "multi_file_batch_start",
+          count: plan.operations.length,
+          message: `Applying ${plan.operations.length} file operation(s)`,
+        });
+
+        const backups: FileBackup[] = [];
+        const changed: string[] = [];
+        const failed: string[] = [];
+
+        try {
+          for (let index = 0; index < plan.operations.length; index++) {
+            const operation = plan.operations[index]!;
+            writer?.({
+              type: "multi_file_batch_progress",
+              file_path: operation.relativePath,
+              operation: operation.type,
+              current: index + 1,
+              total: plan.operations.length,
+              message: `${operation.type} ${operation.relativePath}`,
+            });
+
+            const backup = await readIfExists(operation.absolutePath);
+            backups.push({
+              absolutePath: operation.absolutePath,
+              relativePath: operation.relativePath,
+              existed: backup.existed,
+              content: backup.content,
+            });
+
+            const nextContent = await computeNextContent(operation);
+            await fs.mkdir(path.dirname(operation.absolutePath), { recursive: true });
+            await fs.writeFile(operation.absolutePath, nextContent, "utf-8");
+            changed.push(operation.relativePath);
+          }
+
+          const batchId = await saveBatchSnapshot(projectPath, backups, input.agentName);
+
+          writer?.({
+            type: "multi_file_batch_complete",
+            count: changed.length,
+            batchId,
+            message: `Applied ${changed.length} file operation(s)`,
+          });
+
+          const lines = [
+            `Applied ${changed.length} file operation(s).`,
+            `Snapshot batch: ${batchId}`,
+            "",
+            ...changed.map((filePath) => `- ${filePath}`),
+          ];
+
+          if (plan.predictedIssues.length > 0) {
+            lines.push("", "Predictive warnings:");
+            for (const issue of plan.predictedIssues.slice(0, 10)) {
+              lines.push(`- [${issue.severity}] ${issue.filePath}: ${issue.category} - ${issue.message}`);
+            }
+          }
+
+          return lines.join("\n");
+        } catch (error) {
+          failed.push(error instanceof Error ? error.message : String(error));
+          await restoreBackups(backups);
+
+          writer?.({
+            type: "multi_file_batch_error",
+            count: changed.length,
+            error: failed[0],
+            message: `Batch failed and was rolled back`,
+          });
+
+          throw new Error(`Batch failed and rolled back: ${failed[0]}`);
+        }
+      },
+      {
+        name: "apply_file_batch",
+        description:
+          "Apply multiple file writes/edits in one validated batch with snapshots and rollback on failure. Specialist leads should prefer this for 2+ file changes.",
+        schema: z.object({
+          operations: z.array(operationSchema).describe("File operations to apply in order"),
+          agentName: z.string().describe("Name of the specialist agent applying the batch"),
+          runPredictiveAnalysis: z.boolean().optional().describe("Run predictive code checks on write operations (default true)"),
+          allowHighRisk: z.boolean().optional().describe("Allow high-risk predictive findings (default false)"),
+          highRiskRationale: z.string().optional().describe("Required explanation when allowHighRisk is true"),
+        }),
+      },
+    ),
+  ];
+}
