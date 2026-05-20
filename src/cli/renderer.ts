@@ -4,6 +4,7 @@ import path from "path";
 import { AGENT_ICONS, AGENT_LABELS, AgentRole } from "../types/index.js";
 import { MarkdownStream } from "streammark";
 import { AIMessageChunk, ToolMessage } from "@langchain/core/messages";
+import type { ChalkInstance } from "chalk";
 
 const O = chalk.hex("#FF8C00");
 const DIM = chalk.hex("#996600");
@@ -55,6 +56,7 @@ export class StreamRenderer {
   private thinkingSpinner: Ora | null = null;
   private currentSource = "";  // Track which agent is currently streaming tokens
   private midLine = false;     // Track if we're in the middle of a line
+  private printedToolResults = new Set<string>();
 
 
   constructor(private readonly isHeadless: boolean = false) {}
@@ -195,19 +197,16 @@ export class StreamRenderer {
       const mode = isMultiMode ? modeOrData : "updates";
       const data = isMultiMode ? maybeData : modeOrData;
 
-      const isSubagent = namespace.some((s: string) => s.startsWith("tools:"));
-      const source = isSubagent
-        ? namespace.find((s: string) => s.startsWith("tools:")) ?? "subagent"
-        : "main";
+      const sourceInfo = this.resolveSource(namespace, data);
 
       if (mode === "updates") {
-        const result = this.onUpdate(source, namespace, data, isSubagent);
+        const result = this.onUpdate(sourceInfo.source, namespace, data, sourceInfo.isSubagent);
         if (result) interrupt = result;
       } else if (mode === "messages") {
-        this.onMessage(source, namespace, data, isSubagent);
+        this.onMessage(sourceInfo.source, namespace, data, sourceInfo.isSubagent);
       } else if (mode === "custom") {
         // Handle custom events if needed
-        this.onCustomEvent(source, namespace, data, isSubagent);
+        this.onCustomEvent(sourceInfo.source, namespace, data, sourceInfo.isSubagent);
       }
     }
 
@@ -218,6 +217,43 @@ export class StreamRenderer {
     console.log("");
 
     return interrupt;
+  }
+
+  private resolveSource(namespace: string[], data: any): { source: string; isSubagent: boolean } {
+    const toolNamespace = namespace.find((segment: string) => segment.startsWith("tools:"));
+    if (!toolNamespace) {
+      return { source: "pm-agent", isSubagent: false };
+    }
+
+    const mappedAgentId = this.namespaceToAgent.get(toolNamespace);
+    if (mappedAgentId) {
+      const agent = this.agents.get(mappedAgentId);
+      return { source: agent?.name ?? "subagent", isSubagent: true };
+    }
+
+    const directToolId = toolNamespace.split(":").slice(1).join(":");
+    const directAgent = this.agents.get(directToolId);
+    if (directAgent) {
+      this.namespaceToAgent.set(toolNamespace, directToolId);
+      directAgent.status = directAgent.status === "spawned" ? "working" : directAgent.status;
+      return { source: directAgent.name, isSubagent: true };
+    }
+
+    if (this.hasModelActivity(data)) {
+      this.markWorking(toolNamespace);
+      const agentId = this.namespaceToAgent.get(toolNamespace);
+      const agent = agentId ? this.agents.get(agentId) : undefined;
+      if (agent) {
+        return { source: agent.name, isSubagent: true };
+      }
+    }
+
+    return { source: "pm-agent", isSubagent: false };
+  }
+
+  private hasModelActivity(data: any): boolean {
+    if (!data || typeof data !== "object") return false;
+    return Object.prototype.hasOwnProperty.call(data, "model_request");
   }
 
   private startThinkingSpinner(): void {
@@ -276,8 +312,6 @@ export class StreamRenderer {
       // Detect completions at ANY level where 'tools' node has ToolMessage results
       if (node === "tools") {
         this.detectComplete(nodeData);
-        // Display tool results with better formatting
-        this.renderToolResults(nodeData, isSubagent, source);
       }
     }
 
@@ -299,49 +333,8 @@ export class StreamRenderer {
       if (msg.tool_calls && msg.tool_calls.length > 0) {
         for (const tc of msg.tool_calls) {
           if (tc.name) {
-            const agentLabel = _isSubagent ? this.subAgentLabel(_source.replace("tools:", "").split(":")[0] ?? "agent") : "PM";
-            const icon = _isSubagent ? this.agentIcon(_source.replace("tools:", "").split(":")[0] ?? "agent") : "🎯";
-            console.log(`  ${chalk.cyan("→")} ${icon} ${chalk.hex("#AAAAAA")(agentLabel)} ${chalk.gray("calling")} ${chalk.cyan(tc.name)}`);
+            this.printAgentEvent(_source, _isSubagent, "call", `calling ${tc.name}`);
           }
-        }
-      }
-    }
-  }
-
-  /**
-   * Render tool execution results with better formatting
-   * Skip rendering for file operations - they're handled in finishPendingTool
-   */
-  private renderToolResults(data: any, isSubagent: boolean = false, source: string = "main"): void {
-    const messages = (data as any)?.messages ?? [];
-    for (const msg of messages) {
-      if (msg.type === "tool" && msg.name) {
-        // Skip file operations - they're handled in finishPendingTool with enhanced preview
-        if (msg.name === "write_file" || msg.name === "edit_file" || msg.name === "read_file") {
-          continue;
-        }
-        
-        const content = String(msg.content ?? "");
-        const agentLabel = isSubagent ? this.subAgentLabel(source.replace("tools:", "").split(":")[0] ?? "agent") : "PM";
-        const icon = isSubagent ? this.agentIcon(source.replace("tools:", "").split(":")[0] ?? "agent") : "🎯";
-        
-        // Format tool result based on tool type
-        if (msg.name === "execute") {
-          // Show command output preview
-          const lines = content.split("\n").slice(0, 3);
-          console.log(`    ${chalk.green("✓")} ${icon} ${chalk.hex("#AAAAAA")(agentLabel)} ${chalk.gray(msg.name)}`);
-          for (const line of lines) {
-            if (line.trim()) {
-              console.log(`      ${chalk.gray(line.slice(0, 100))}`);
-            }
-          }
-          if (content.split("\n").length > 3) {
-            console.log(`      ${chalk.gray(`… ${content.split("\n").length - 3} more lines`)}`);
-          }
-        } else {
-          // Other tools - show short result
-          const shortContent = content.slice(0, 120);
-          console.log(`    ${chalk.green("✓")} ${icon} ${chalk.hex("#AAAAAA")(agentLabel)} ${chalk.gray(msg.name)}: ${chalk.gray(shortContent)}${content.length > 120 ? "..." : ""}`);
         }
       }
     }
@@ -374,8 +367,8 @@ export class StreamRenderer {
             agentName: source,
           };
           
-          const agentLabel = isSubagent ? this.subAgentLabel(source.replace("tools:", "").split(":")[0] ?? "agent") : "PM";
-          const icon = isSubagent ? this.agentIcon(source.replace("tools:", "").split(":")[0] ?? "agent") : "🎯";
+          const agentLabel = this.displayLabel(source, isSubagent);
+          const icon = this.agentIcon(source);
           
           if (!this.isHeadless) {
             // For file operations, use a simpler spinner message to avoid glitching
@@ -403,10 +396,11 @@ export class StreamRenderer {
     if (ToolMessage.isInstance(message)) {
       this.finishPendingTool();
       if (message.name) {
+        const resultKey = `${message.tool_call_id ?? ""}:${message.name}:${String(message.content ?? "").slice(0, 60)}`;
+        if (this.printedToolResults.has(resultKey)) return;
+        this.printedToolResults.add(resultKey);
         const content = String(message.content ?? "");
-        const shortResult = content.slice(0, 150);
-        const prefix = isSubagent ? `[${source}] ` : "";
-        console.log(`    ${chalk.green("✓")} ${prefix}${chalk.gray(`${message.name}: ${shortResult}${content.length > 150 ? "..." : ""}`)}`);
+        this.renderToolResultLine(source, isSubagent, message.name, content);
       }
     }
 
@@ -418,7 +412,7 @@ export class StreamRenderer {
     ) {
       if (!this.isHeadless && !this.pendingTool) {
         // Determine display label
-        const displaySource = isSubagent ? source : "main";
+        const displaySource = isSubagent ? source : "pm-agent";
         
         // When source changes, finalize previous stream and start fresh
         if (displaySource !== this.currentSource) {
@@ -430,11 +424,9 @@ export class StreamRenderer {
             process.stdout.write("\n");
             this.midLine = false;
           }
-          const label = isSubagent 
-            ? `[${this.subAgentLabel(displaySource.replace("tools:", "").split(":")[0] ?? "subagent")}]`
-            : ">_";
-          const color = isSubagent ? chalk.gray : chalk.hex("#FF6A00");
-          process.stdout.write(`\n  ${color(label)} `);
+          const label = this.displayLabel(displaySource, isSubagent);
+          const border = isSubagent ? this.agentColor(displaySource)("│") : chalk.hex("#FF6A00")("│");
+          process.stdout.write(`\n  ${border} ${this.agentIcon(displaySource)} ${this.agentColor(displaySource).bold(label)} ${GY("says")}\n  ${border} `);
           this.currentSource = displaySource;
         }
         
@@ -632,6 +624,107 @@ export class StreamRenderer {
     }
   }
 
+  private renderToolResultLine(source: string, isSubagent: boolean, toolName: string, content: string): void {
+    const label = this.displayLabel(source, isSubagent);
+    const color = this.agentColor(source);
+    const icon = this.agentIcon(source);
+
+    if (toolName === "get_executable_tasks") {
+      this.renderExecutableTasks(content, source);
+      return;
+    }
+
+    if (toolName === "get_task_graph_progress" || toolName === "mark_task_complete" || toolName === "mark_task_failed") {
+      this.renderTaskGraphProgress(content, source, toolName);
+      return;
+    }
+
+    if (toolName === "create_task_graph") {
+      console.log(`  ${color("┌─")} ${icon} ${color.bold("Task Graph")} ${GY("ready")}`);
+      console.log(`  ${color("└─")} ${GY("parallel planning workspace created")}`);
+      return;
+    }
+
+    if (toolName === "add_task_node" || toolName === "add_task_dependency" || toolName === "mark_task_running") {
+      console.log(`  ${color("│")} ${G("✓")} ${GY(content.slice(0, 140))}`);
+      return;
+    }
+
+    const shortResult = this.compact(content, toolName === "execute" ? 260 : 160);
+    console.log(`  ${color("│")} ${G("✓")} ${icon} ${GY(label)} ${chalk.gray(toolName)} ${GY(shortResult)}`);
+  }
+
+  private renderExecutableTasks(content: string, source: string): void {
+    const color = this.agentColor(source);
+    const tasks = this.safeParseArray(content);
+    console.log("");
+    console.log(`  ${color("┌─")} ${color.bold("Executable Now")} ${GY(`${tasks.length} task${tasks.length === 1 ? "" : "s"}`)}`);
+    if (tasks.length === 0) {
+      console.log(`  ${color("│")} ${GY("No pending tasks are unblocked yet.")}`);
+    }
+    for (const task of tasks) {
+      const id = String(task.id ?? task.taskId ?? "task");
+      const agent = String(task.agent ?? "auto");
+      const priority = task.priority !== undefined ? ` P${task.priority}` : "";
+      const eta = task.estimatedTime !== undefined ? ` ${task.estimatedTime}s` : "";
+      console.log(`  ${color("│")} ${this.agentIcon(agent)} ${WH(id.padEnd(16).slice(0, 16))} ${GY(agent.padEnd(15).slice(0, 15))} ${YL(`${priority}${eta}`.trim())}`);
+      if (task.description) {
+        console.log(`  ${color("│")}   ${GY(this.compact(String(task.description), 84))}`);
+      }
+    }
+    console.log(`  ${color("└─")}`);
+    console.log("");
+  }
+
+  private renderTaskGraphProgress(content: string, source: string, toolName: string): void {
+    const color = this.agentColor(source);
+    const tasks = this.safeParseArray(content);
+    const completed = tasks.filter((task) => task.status === "completed").length;
+    const running = tasks.filter((task) => task.status === "running").length;
+    const blocked = tasks.filter((task) => task.status === "blocked" || task.status === "failed").length;
+    const title = toolName === "mark_task_complete" ? "Task Graph Updated" : "Task Graph Progress";
+    const total = tasks.length || 1;
+    const width = 18;
+    const filled = Math.round((completed / total) * width);
+    const bar = G("█".repeat(filled)) + GY("░".repeat(width - filled));
+
+    console.log("");
+    console.log(`  ${color("┌─")} ${color.bold(title)} ${bar} ${GY(`${completed}/${tasks.length} done`)}`);
+    if (running > 0 || blocked > 0) {
+      console.log(`  ${color("│")} ${YL(`${running} running`)} ${blocked > 0 ? RD(`${blocked} blocked/failed`) : ""}`);
+    }
+    for (const task of tasks) {
+      const status = String(task.status ?? "pending");
+      const marker = status === "completed" ? G("✓") : status === "running" ? YL("●") : status === "blocked" || status === "failed" ? RD("×") : GY("○");
+      const id = String(task.taskId ?? task.id ?? "task");
+      const msg = String(task.message ?? "");
+      console.log(`  ${color("│")} ${marker} ${WH(id.padEnd(16).slice(0, 16))} ${GY(status.padEnd(9).slice(0, 9))} ${GY(this.compact(msg, 58))}`);
+    }
+    console.log(`  ${color("└─")}`);
+    console.log("");
+  }
+
+  private safeParseArray(content: string): any[] {
+    try {
+      const parsed = JSON.parse(content);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+
+  private compact(value: string, maxLength: number): string {
+    const oneLine = value.replace(/\s+/g, " ").trim();
+    return oneLine.length > maxLength ? `${oneLine.slice(0, maxLength - 3)}...` : oneLine;
+  }
+
+  private printAgentEvent(source: string, isSubagent: boolean, kind: "call" | "info", message: string): void {
+    const color = this.agentColor(source);
+    const label = this.displayLabel(source, isSubagent);
+    const marker = kind === "call" ? CY("→") : GY("•");
+    console.log(`  ${color("│")} ${marker} ${this.agentIcon(source)} ${color.bold(label)} ${GY(message)}`);
+  }
+
   /** Enhanced file preview with better formatting and agent attribution */
   private renderEnhancedFilePreview(filePath: string, content: string, agentName: string): void {
     if (!content || content.trim().length === 0) return;
@@ -765,9 +858,9 @@ export class StreamRenderer {
     const icon = this.agentIcon(subName);
     const label = this.subAgentLabel(subName);
     console.log("");
-    console.log(`  ${O("┌")} ${icon} ${O.bold(`Delegating → ${label}`)}`);
+    console.log(`  ${O("┌─")} ${icon} ${O.bold(`Agent Lane Started: ${label}`)}`);
     if (shortDesc) console.log(`  ${O("│")} ${GY(shortDesc)}`);
-    console.log(`  ${O("└─────────────────────────")}`);
+    console.log(`  ${O("└─")} ${GY("streaming separately below")}`);
     console.log("");
     this.startToolSpinner(`${label} is working...`);
   }
@@ -857,14 +950,17 @@ export class StreamRenderer {
           this.flushBuffer();
           const icon = this.agentIcon(agent.name);
           const label = this.subAgentLabel(agent.name);
-          console.log(`  ${icon} ${G(`${label} ✓ Done`)}`);
+          const color = this.agentColor(agent.name);
+          console.log(`  ${color("┌─")} ${icon} ${G.bold(`${label} complete`)}`);
 
           const total = this.agents.size;
           const done = [...this.agents.values()].filter((a) => a.status === "done").length;
           const working = [...this.agents.values()].filter((a) => a.status === "working").length;
           if (total > 1) {
             const bar = G("█".repeat(done)) + YL("░".repeat(total - done));
-            console.log(`  ${GY("  Progress:")} ${bar} ${GY(`${done}/${total} agents`)} ${working > 0 ? YL(`(${working} active)`) : ""}`);
+            console.log(`  ${color("└─")} ${bar} ${GY(`${done}/${total} agents`)} ${working > 0 ? YL(`${working} active`) : GY("all settled")}`);
+          } else {
+            console.log(`  ${color("└─")} ${GY("agent lane closed")}`);
           }
           console.log("");
         }
@@ -887,6 +983,25 @@ export class StreamRenderer {
       .split("-")
       .map((w) => ACRONYMS.has(w.toLowerCase()) ? w.toUpperCase() : w.charAt(0).toUpperCase() + w.slice(1))
       .join(" ");
+  }
+
+  private displayLabel(name: string, isSubagent: boolean): string {
+    if (!isSubagent && (name === "main" || name === "pm-agent")) return "PM";
+    return this.subAgentLabel(name);
+  }
+
+  private agentColor(name: string): ChalkInstance {
+    const lower = name.toLowerCase();
+    if (lower.includes("backend") || lower.includes("server") || lower.includes("api")) return chalk.cyan;
+    if (lower.includes("frontend") || lower.includes("ui") || lower.includes("component")) return chalk.magenta;
+    if (lower.includes("qa") || lower.includes("test")) return chalk.yellow;
+    if (lower.includes("security")) return chalk.red;
+    if (lower.includes("deploy") || lower.includes("devops")) return chalk.green;
+    if (lower.includes("data") || lower.includes("ai")) return chalk.hex("#B464FF");
+    if (lower.includes("platform") || lower.includes("tool")) return chalk.hex("#FFB400");
+    if (lower.includes("mobile")) return chalk.hex("#64B4FF");
+    if (lower.includes("review")) return chalk.blue;
+    return chalk.hex("#FF6A00");
   }
 
   private agentIcon(name: string): string {

@@ -74,12 +74,6 @@ function assessRisk(
   return { level: RiskLevel.Safe, reason: "" };
 }
 
-const IDEMPOTENT_COMMAND_PATTERNS: RegExp[] = [
-  /npm install/,
-  /npm ci/,
-  /npm run build/,
-];
-
 const MAX_HISTORY = 30;
 const MAX_REPEATS = 3;
 const toolCallHistory: Array<{ name: string; hash: string }> = [];
@@ -116,13 +110,33 @@ export const judgmentMiddleware = createMiddleware({
     if (toolName === "write_file" || toolName === "edit_file") {
       const content = (args["content"] ?? args["new_str"] ?? "") as string;
       const filePath = (args["file_path"] ?? args["path"] ?? "") as string;
+      const normalizedPath = filePath.replace(/\\/g, "/");
+      const ext = filePath.substring(filePath.lastIndexOf(".")).toLowerCase();
+
+      if (ext !== ".md") {
+        const msg = `[JUDGMENT BLOCKED] PM Agent cannot write implementation files.
+
+PM responsibilities:
+1. Create planning/context Markdown files only
+2. Build task graphs and dependency order
+3. Delegate all coding work to specialist agents with task()
+
+Blocked file: "${filePath}"
+Delegate this implementation to the responsible lead agent instead.`;
+        console.log(chalk.red(`  ✗ BLOCKED: PM attempted implementation write: ${filePath}`));
+        return new ToolMessage({
+          name: toolName,
+          content: msg,
+          tool_call_id: (request.toolCall as any).id || "unknown",
+          status: "error"
+        });
+      }
 
       const SOURCE_EXTENSIONS = new Set([
         ".ts", ".tsx", ".js", ".jsx", ".py", ".css", ".vue", ".svelte",
         ".html", ".scss", ".less", ".go", ".rs", ".java", ".rb",
       ]);
-      const ext = filePath.substring(filePath.lastIndexOf(".")).toLowerCase();
-      const isSajicodeMd = filePath.includes(".sajicode") && ext === ".md";
+      const isSajicodeMd = normalizedPath.includes(".sajicode/") && ext === ".md";
 
       if (SOURCE_EXTENSIONS.has(ext) && !isSajicodeMd) {
         const lineCount = typeof content === "string" ? content.split("\n").length : 0;
@@ -157,21 +171,23 @@ export const judgmentMiddleware = createMiddleware({
 
     if (toolName === "execute" || toolName === "bash") {
       const command = (args["command"] ?? args["bash"] ?? "") as string;
-      for (const pattern of IDEMPOTENT_COMMAND_PATTERNS) {
-        if (pattern.test(command)) {
-          const cmdHash = `cmd::${command}`;
-          const recentSame = toolCallHistory.slice(-5).filter((h) => h.hash === cmdHash).length;
-          if (recentSame >= 2) {
-            console.log(
-              chalk.yellow(
-                `  ⚠ WARNING: "${command}" called ${recentSame} times recently. ` +
-                `Check .sajicode/process-state.json — it may have already completed.`
-              )
-            );
-          }
-          break;
-        }
-      }
+      const msg = `[JUDGMENT BLOCKED] PM Agent cannot run shell commands.
+
+PM responsibilities:
+1. Plan, create Markdown context, and delegate
+2. Ask specialist leads to run setup/build/test/server commands
+3. Use artifacts and tool results to coordinate next steps
+
+Blocked command: ${command}
+Delegate this command to the responsible lead agent instead.`;
+      console.log(chalk.red(`  ✗ BLOCKED: PM attempted shell execution: ${command}`));
+      return new ToolMessage({
+        name: toolName,
+        content: msg,
+        tool_call_id: (request.toolCall as any).id || "unknown",
+        status: "error"
+      });
+
     }
 
     const isLooping = recordAndDetectLoop(toolName, args);

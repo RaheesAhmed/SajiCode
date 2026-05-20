@@ -155,7 +155,7 @@ export function createStreamingExecuteTool(backend: BackendProtocol) {
       }
     },
     {
-      name: "execute",
+      name: "shell_execute",
       description:
         "Execute a shell command in the project directory with progress streaming. " +
         "Routes through SafeShellBackend for security checks and process state caching.",

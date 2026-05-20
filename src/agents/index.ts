@@ -1,5 +1,5 @@
 import { createDeepAgent, CompositeBackend, StoreBackend } from "deepagents";
-import { SafeShellBackend, createStreamingExecuteTool } from "../tools/shell-wrapper.js";
+import { SafeShellBackend } from "../tools/shell-wrapper.js";
 import { MemorySaver } from "@langchain/langgraph";
 import { InMemoryStore } from "@langchain/langgraph-checkpoint";
 import type { ProjectConfig, OnboardingResult, HumanInTheLoopConfig } from "../types/index.js";
@@ -23,6 +23,7 @@ import { createFileTrackerTools } from "../tools/file-tracker.js";
 import { createDependencyOrderTool } from "../tools/dependency-graph.js";
 import { createCodeSearchTools } from "../tools/code-search.js";
 import { createMemoryTools } from "../tools/memory-tools.js";
+import { createTaskGraphTools } from "../tools/task-graph-tools.js";
 import { initThreeLayerMemory, loadPointerIndex, formatPointerIndexForPrompt } from "../memory/three-layer-memory.js";
 
 function buildInterruptOn(
@@ -88,6 +89,7 @@ export async function createSajiCode(
   
   const dependencyOrderTool = createDependencyOrderTool();
   const codeSearchTools = createCodeSearchTools(config.projectPath);
+  const taskGraphTools = createTaskGraphTools(config.projectPath);
 
   // Build the shell backend for the PM agent
   const shellBackend = new SafeShellBackend({
@@ -96,7 +98,7 @@ export async function createSajiCode(
   });
 
   // Create streaming execute tool for shell commands with progress events
-  const streamingExecuteTool = createStreamingExecuteTool(shellBackend);
+  
   
   // Create three-layer memory tools
   const memoryTools = createMemoryTools(config.projectPath);
@@ -123,8 +125,9 @@ export async function createSajiCode(
       
       dependencyOrderTool,
       ...codeSearchTools,
+      ...taskGraphTools,
       // Streaming execute tool for shell commands with progress events
-      streamingExecuteTool,
+      
       // Add three-layer memory tools
       ...memoryTools,
     ] as any,
@@ -208,3 +211,12 @@ function buildContextPrompt(result: OnboardingResult): string {
 }
 
 export { runOnboarding } from "./onboarding.js";
+
+// Task Graph & Parallelization exports
+export { TaskGraph } from "./task-graph.js";
+export type { TaskNode, TaskProgress, TaskEventPayload, TaskCompletedPayload, TaskFailedPayload, TaskBlockedPayload, AllCompletePayload } from "./task-types.js";
+export { WorkloadBalancer } from "./workload-balancer.js";
+export type { AgentLoad } from "./task-types.js";
+
+
+
