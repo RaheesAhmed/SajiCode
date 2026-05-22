@@ -227,6 +227,7 @@ export async function appendTranscript(
   transcriptFileName: string,
   entry: TranscriptEntry
 ): Promise<void> {
+  await initThreeLayerMemory(projectPath);
   const transcriptPath = path.join(projectPath, TRANSCRIPTS_DIR, transcriptFileName);
   
   const line = `[${entry.timestamp}] [${entry.agent}] ${entry.action}: ${entry.context}\n`;
@@ -305,8 +306,8 @@ ${pointerIndex}
 
 **How to use memory:**
 1. This index shows available topics with brief summaries (max 150 chars each)
-2. To get detailed info on a topic, use the read_file tool on the topic file path
-3. To search transcript history, use grep on transcript files (never load full transcripts)
+2. To get detailed info on a topic, use read_topic with the topic filename from the index
+3. To search transcript history, use search_transcripts (never load full transcripts)
 4. Treat memory as hints, not absolute truth - verify important details
 
 **Memory discipline:**

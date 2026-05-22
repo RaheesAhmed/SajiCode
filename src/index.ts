@@ -14,6 +14,10 @@ import { input as inquirerInput, select as inquirerSelect } from "@inquirer/prom
 import { ChannelRouter } from "./channels/router.js";
 import { WhatsAppAdapter } from "./channels/whatsapp.js";
 import { runHook } from "./utils/hooks.js";
+import {
+  createSessionTranscriptRecorder,
+  type SessionTranscriptRecorder,
+} from "./memory/session-transcript.js";
 
 const ORANGE = chalk.hex("#FF8C00");
 const GY = chalk.gray;
@@ -120,7 +124,7 @@ async function runAgentTurn(
   initialInput: any,
   renderer: StreamRenderer,
   hitl: HumanInTheLoopConfig | undefined
-): Promise<void> {
+): Promise<"completed" | "failed"> {
   let input: any = initialInput;
 
   while (true) {
@@ -134,10 +138,10 @@ async function runAgentTurn(
       const interrupt = await renderer.processMultiStream(stream as any);
 
       // No interrupt → turn is finished
-      if (!interrupt) break;
+      if (!interrupt) return "completed";
 
       // HITL is disabled (shouldn't happen but be safe)
-      if (!hitl?.enabled) break;
+      if (!hitl?.enabled) return "completed";
 
       // Show the full interrupt block, then collect one decision per action
       renderer.printInterrupt(interrupt);
@@ -150,8 +154,81 @@ async function runAgentTurn(
       if (error instanceof Error && error.stack) {
         console.error(chalk.gray(`    ${error.stack.split('\n').slice(1, 3).join('\n    ')}`));
       }
-      break;
+      return "failed";
     }
+  }
+}
+
+const MAX_TRANSCRIPT_CONTEXT_LENGTH = 280;
+
+function summarizeTurnInput(input: any): string {
+  const messages = Array.isArray(input?.messages) ? input.messages : [];
+  const lastMessage = messages[messages.length - 1];
+  const rawContent = typeof lastMessage?.content === "string"
+    ? lastMessage.content
+    : JSON.stringify(lastMessage?.content ?? "Agent turn started");
+  const compact = rawContent.replace(/\s+/g, " ").trim();
+
+  return compact.length > MAX_TRANSCRIPT_CONTEXT_LENGTH
+    ? `${compact.slice(0, MAX_TRANSCRIPT_CONTEXT_LENGTH - 3)}...`
+    : compact || "Agent turn started";
+}
+
+async function recordTranscriptMilestone(
+  transcript: SessionTranscriptRecorder,
+  action: string,
+  context: string,
+): Promise<void> {
+  try {
+    await transcript.record("pm-agent", action, context);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(chalk.gray(`\n  memory transcript skipped: ${message}`));
+  }
+}
+
+async function runAgentTurnWithTranscript(
+  agent: any,
+  sessionConfig: Record<string, any>,
+  initialInput: any,
+  renderer: StreamRenderer,
+  hitl: HumanInTheLoopConfig | undefined,
+  transcript: SessionTranscriptRecorder,
+): Promise<void> {
+  await recordTranscriptMilestone(
+    transcript,
+    "turn_started",
+    summarizeTurnInput(initialInput),
+  );
+
+  try {
+    const result = await runAgentTurn(
+      agent,
+      sessionConfig,
+      initialInput,
+      renderer,
+      hitl,
+    );
+    if (result === "failed") {
+      await recordTranscriptMilestone(
+        transcript,
+        "turn_failed",
+        "Agent turn failed after a streamed error",
+      );
+    } else {
+      await recordTranscriptMilestone(
+        transcript,
+        "turn_completed",
+        "Agent turn finished",
+      );
+    }
+  } catch (error) {
+    await recordTranscriptMilestone(
+      transcript,
+      "turn_failed",
+      error instanceof Error ? error.message : String(error),
+    );
+    throw error;
   }
 }
 
@@ -171,6 +248,7 @@ async function main(): Promise<void> {
   if (cliArgs.model)    config.modelConfig.modelName = cliArgs.model;
 
   const threadId = generateThreadId();
+  const transcript = createSessionTranscriptRecorder(projectPath, threadId);
   const onboardingResult: OnboardingResult = {
     experienceLevel: "expert",
     projectDescription: "",
@@ -247,12 +325,13 @@ async function main(): Promise<void> {
 
     try {
       runHook("preTask", config.hooks, projectPath);
-      await runAgentTurn(
+      await runAgentTurnWithTranscript(
         agent,
         sessionConfig,
         { messages: [{ role: "user", content: cliArgs.task }] },
         renderer,
-        config.humanInTheLoop
+        config.humanInTheLoop,
+        transcript,
       );
       runHook("postTask", config.hooks, projectPath);
       runHook("onExit", config.hooks, projectPath);
@@ -332,12 +411,13 @@ async function main(): Promise<void> {
     // ── Agent turn ────────────────────────────────────────────────────────
     try {
       runHook("preTask", config.hooks, projectPath);
-      await runAgentTurn(
+      await runAgentTurnWithTranscript(
         agent,
         sessionConfig,
         { messages: [{ role: "user", content: trimmed }] },
         renderer,
-        config.humanInTheLoop
+        config.humanInTheLoop,
+        transcript,
       );
       runHook("postTask", config.hooks, projectPath);
     } catch (error) {
