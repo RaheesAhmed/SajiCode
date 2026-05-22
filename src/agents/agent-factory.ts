@@ -28,6 +28,7 @@ import { createCodeSearchTools } from "../tools/code-search.js";
 import { createMemoryTools } from "../tools/memory-tools.js";
 import { createIntelligenceTools } from "../tools/intelligence-tools.js";
 import { createMultiFileEditorTools } from "../tools/multi-file-editor.js";
+import { createTeamContextTools } from "../tools/team-context.js";
 import { MCPClientManager } from "../mcp/MCPClient.js";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -67,7 +68,7 @@ YOU ARE A LEAD ENGINEER — BUILD IT YOURSELF
 RULE: Never call task() to spawn sub-agents. You ARE the specialist. Do the work directly.
 
 WORKFLOW:
-  1. Read .sajicode/active_context.md and your CONTEXT_BRIEFING
+  1. Call read_team_context with your agent name BEFORE reading project files
   2. Read the relevant SKILL.md files for your domain BEFORE writing any code
   3. Create all required directories in one execute() call
   4. Before risky code (auth, file I/O, server startup, generated TS), call predict_code_issues and fix high/medium issues
@@ -146,6 +147,7 @@ export async function createAgentFromSpec(
     ...createMemoryTools(projectPath),
     ...createIntelligenceTools(projectPath),
     ...createMultiFileEditorTools(projectPath),
+    ...createTeamContextTools(projectPath),
   ];
 
   const agent = await createDeepAgent({
