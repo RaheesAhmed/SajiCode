@@ -3,6 +3,7 @@ import { appendTranscript } from "./three-layer-memory.js";
 const MAX_TRANSCRIPT_THREAD_LENGTH = 80;
 
 export interface SessionTranscriptRecorder {
+  projectPath: string;
   transcriptFile: string;
   record(agent: string, action: string, context: string): Promise<void>;
 }
@@ -25,6 +26,7 @@ export function createSessionTranscriptRecorder(
   const transcriptFile = getSessionTranscriptFileName(threadId);
 
   return {
+    projectPath,
     transcriptFile,
     async record(agent: string, action: string, context: string): Promise<void> {
       await appendTranscript(projectPath, transcriptFile, {

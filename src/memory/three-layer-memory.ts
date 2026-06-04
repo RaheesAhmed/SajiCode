@@ -13,10 +13,6 @@
 
 import fs from "fs/promises";
 import path from "path";
-import { exec } from "child_process";
-import { promisify } from "util";
-
-const execAsync = promisify(exec);
 
 const MEMORY_DIR = ".sajicode/memories";
 const INDEX_DIR = `${MEMORY_DIR}/index`;
@@ -249,25 +245,56 @@ export async function grepTranscripts(
   transcriptFiles?: string[]
 ): Promise<string[]> {
   const transcriptsPath = path.join(projectPath, TRANSCRIPTS_DIR);
-  
+
   try {
-    let grepCommand: string;
-    
-    if (transcriptFiles && transcriptFiles.length > 0) {
-      // Search specific files
-      const files = transcriptFiles.map(f => path.join(transcriptsPath, f)).join(' ');
-      grepCommand = `grep -n "${pattern}" ${files} 2>/dev/null || true`;
-    } else {
-      // Search all transcript files
-      grepCommand = `grep -rn "${pattern}" ${transcriptsPath} 2>/dev/null || true`;
+    const matcher = createTranscriptMatcher(pattern);
+    const files = transcriptFiles && transcriptFiles.length > 0
+      ? transcriptFiles.map((file) => normalizeTranscriptFileName(file))
+      : await listTranscriptFiles(transcriptsPath);
+
+    const results: string[] = [];
+    for (const file of files) {
+      const transcriptPath = path.join(transcriptsPath, file);
+      const content = await fs.readFile(transcriptPath, "utf-8").catch(() => "");
+      if (!content) continue;
+
+      const lines = content.split(/\r?\n/);
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i] ?? "";
+        if (matcher(line)) {
+          results.push(`${file}:${i + 1}:${line}`);
+        }
+      }
     }
 
-    const { stdout } = await execAsync(grepCommand);
-    return stdout.trim().split('\n').filter(line => line.length > 0);
+    return results;
   } catch {
-    // grep returns non-zero exit code when no matches found
     return [];
   }
+}
+
+function createTranscriptMatcher(pattern: string): (line: string) => boolean {
+  try {
+    const regex = new RegExp(pattern, "i");
+    return (line: string) => regex.test(line);
+  } catch {
+    const normalizedPattern = pattern.toLowerCase();
+    return (line: string) => line.toLowerCase().includes(normalizedPattern);
+  }
+}
+
+async function listTranscriptFiles(transcriptsPath: string): Promise<string[]> {
+  const entries = await fs.readdir(transcriptsPath, { withFileTypes: true }).catch(() => []);
+  return entries
+    .filter((entry) => entry.isFile())
+    .map((entry) => entry.name);
+}
+
+function normalizeTranscriptFileName(file: string): string {
+  return file
+    .replace(/\\/g, "/")
+    .replace(/^transcripts\//, "")
+    .replace(/^\/+/, "");
 }
 
 /**

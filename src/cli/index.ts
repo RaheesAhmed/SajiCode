@@ -5,6 +5,7 @@ import chalk from "chalk";
 import { loadConfig, saveConfig, ensureProjectDir } from "../config/index.js";
 import { createSajiCode, runOnboarding } from "../agents/index.js";
 import { generateThreadId } from "../memory/index.js";
+import { augmentInputWithMemoryContext } from "../memory/turn-context.js";
 import { StreamRenderer } from "./renderer.js";
 import { undoFileChange, listRecentSnapshots } from "../tools/file-tracker.js";
 
@@ -58,10 +59,12 @@ program
       console.log(chalk.gray(`  Model: ${config.modelConfig.modelName}`));
       console.log(chalk.gray(`  Project: ${projectPath}\n`));
 
-      const stream = await agent.stream(
-        {
+      const streamInput = await augmentInputWithMemoryContext(projectPath, {
           messages: [{ role: "user", content: initialMessage }],
-        },
+        });
+
+      const stream = await agent.stream(
+        streamInput,
         {
           ...sessionConfig,
           streamMode: ["updates", "messages", "custom"],

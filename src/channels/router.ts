@@ -3,6 +3,7 @@ import type { ChannelAdapter, ChannelMessage } from "./channel.js";
 import type { SajiCodeOptions } from "../agents/index.js";
 import { createSajiCode } from "../agents/index.js";
 import type { ProjectConfig, OnboardingResult } from "../types/index.js";
+import { augmentInputWithMemoryContext } from "../memory/turn-context.js";
 
 interface ActiveSession {
   agent: any;
@@ -87,7 +88,7 @@ export class ChannelRouter {
       }
 
       messages.push({ role: "user", content: msg.text });
-      const input = { messages };
+      const input = await augmentInputWithMemoryContext(this.config.projectPath, { messages });
 
       const stream = await session.agent.stream(input, {
         ...sessionConfig,
@@ -99,7 +100,7 @@ export class ChannelRouter {
       let responseText = "";
       for await (const chunk of stream) {
         // Format: [namespace[], mode, data]
-        const [_ns, mode, data] = chunk as [string[], string, any];
+        const [, mode, data] = chunk as [string[], string, any];
 
         if (mode === "messages") {
           const items = Array.isArray(data) ? data : [data];

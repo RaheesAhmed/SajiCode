@@ -18,6 +18,7 @@ import {
   createSessionTranscriptRecorder,
   type SessionTranscriptRecorder,
 } from "./memory/session-transcript.js";
+import { augmentInputWithMemoryContext } from "./memory/turn-context.js";
 
 const ORANGE = chalk.hex("#FF8C00");
 const GY = chalk.gray;
@@ -127,7 +128,7 @@ async function runAgentTurn(
 ): Promise<"completed" | "failed"> {
   let input: any = initialInput;
 
-  while (true) {
+  for (;;) {
     try {
       const stream = await agent.stream(input, {
         ...sessionConfig,
@@ -202,10 +203,11 @@ async function runAgentTurnWithTranscript(
   );
 
   try {
+    const inputWithMemory = await augmentInputWithMemoryContext(transcript.projectPath, initialInput);
     const result = await runAgentTurn(
       agent,
       sessionConfig,
-      initialInput,
+      inputWithMemory,
       renderer,
       hitl,
     );
@@ -343,7 +345,7 @@ async function main(): Promise<void> {
     }
   }
 
-  while (true) {
+  for (;;) {
     let resolved = false;
     const input = await new Promise<string | null>((resolve) => {
       const rl = readline.createInterface({

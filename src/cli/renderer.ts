@@ -453,8 +453,9 @@ export class StreamRenderer {
     source: string,
     _namespace: string[],
     data: any,
-    _isSubagent: boolean
+    _isSubagent: boolean,
   ): void {
+    void _isSubagent;
     // Handle file write progress events
     if (data && typeof data === "object") {
       const { type, file_path, file_name, progress, message, error } = data;
