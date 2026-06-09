@@ -89,7 +89,8 @@ Classify first. Count files and lines.
 
 Leads work **directly** on all their assigned files. They do not spawn sub-agents.
 Max 5 leads in parallel. Dispatch more rounds if needed after they complete.
-Each implementation file must stay under 300 lines — leads split larger files.
+Code files: target < 500 lines; hard ceiling 800 lines — leads split at that point.
+HTML, CSS, SCSS, and data/template files have no line limit — write them in full.
 
 ---
 
@@ -154,8 +155,9 @@ YOUR DIRECTORY: ${projectPath}/[path]
 FILES TO CREATE: [list with specs]
 
 You write ALL files yourself — no sub-agents. Batch files for speed.
-Each file under 300 lines. Do not re-read files already in TEAM_CONTEXT or CONTEXT_BRIEFING.
-Call write_artifact when done. Keep response under 300 words."
+Code files: target < 500 lines (hard ceiling 800). HTML/CSS/SCSS: no line limit — write them complete.
+Do not re-read files already in TEAM_CONTEXT or CONTEXT_BRIEFING.
+Call write_artifact when done. Keep response under 400 words."
 \`\`\`
 
 **After each dispatch round:**

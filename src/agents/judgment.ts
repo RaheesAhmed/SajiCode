@@ -242,33 +242,42 @@ export const leadJudgmentMiddleware = createMiddleware({
   ) => {
     const { name: toolName, args } = request.toolCall;
 
-    // Leads can write source files directly up to 300 lines.
-    // Files >= 300 lines should be split into smaller modules.
-    // Leads ARE always allowed to: write .json, .md, .yml, .yaml configs of any size.
+    // Leads can write source files directly up to LEAD_FILE_THRESHOLD lines.
+    // HTML, CSS, SCSS, and data/template files are intentionally EXEMPT —
+    // they are layout/style files and can legitimately be longer.
+    // Leads ARE always allowed to write .json, .md, .yml, .yaml configs of any size.
     if (toolName === "write_file" || toolName === "edit_file") {
       const filePath = (args["file_path"] ?? args["path"] ?? "") as string;
       const content = (args["content"] ?? args["new_str"] ?? "") as string;
+
+      // Only enforce the line cap on logic/code files — NOT on template/style/data files
       const SOURCE_EXTENSIONS = new Set([
         ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs",
         ".py", ".go", ".rs", ".java", ".rb", ".php",
-        ".css", ".scss", ".less", ".vue", ".svelte",
+        ".vue", ".svelte",
+        // NOTE: .html, .css, .scss, .less are intentionally EXCLUDED so that
+        // leads can write full-page HTML templates and complete stylesheets
+        // without hitting an artificial ceiling.
       ]);
       const ext = filePath.substring(filePath.lastIndexOf(".")).toLowerCase();
 
       if (SOURCE_EXTENSIONS.has(ext)) {
         const lineCount = typeof content === "string" ? content.split("\n").length : 0;
-        const LEAD_FILE_THRESHOLD = 300;
+        // Raised from 300 → 800. A well-designed feature module, a complete
+        // Python service, or a full React component can exceed 300 lines
+        // without violating good architecture.
+        const LEAD_FILE_THRESHOLD = 800;
 
         if (lineCount >= LEAD_FILE_THRESHOLD) {
           const msg = `[LEAD BLOCKED] File "${filePath}" has ${lineCount} lines (>= ${LEAD_FILE_THRESHOLD}).
 
 This file is too large. You should:
-1. Split it into smaller modules (each under ${LEAD_FILE_THRESHOLD} lines)
-2. Create multiple smaller files instead of one large file
-3. Extract reusable components/utilities into separate files
+1. Split it into focused modules (each under ${LEAD_FILE_THRESHOLD} lines)
+2. Extract reusable helpers, types, and constants into separate files
+3. One responsibility per file
 
-You CAN write files under ${LEAD_FILE_THRESHOLD} lines directly.`;
-          console.log(chalk.red(`  ✗ LEAD BLOCKED: ${filePath} (${lineCount} lines) — split into smaller files`));
+HTML, CSS, and SCSS files have no line limit and can be written at any length.`;
+          console.log(chalk.red(`  ✗ LEAD BLOCKED: ${filePath} (${lineCount} lines) — split into focused modules`));
           return new ToolMessage({
             name: toolName,
             content: msg,

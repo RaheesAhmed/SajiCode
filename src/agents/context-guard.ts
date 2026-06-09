@@ -2,6 +2,7 @@ import { createMiddleware } from "langchain";
 import { ToolMessage } from "@langchain/core/messages";
 import { execFile } from "child_process";
 import { promisify } from "util";
+import fs from "fs/promises";
 
 const execFileAsync = promisify(execFile);
 
@@ -18,9 +19,19 @@ const BLOCKED_GLOBS_PATTERNS = [
   /\.git\//,
 ];
 
-const fileReadCache = new Map<string, { summary: string; timestamp: number }>();
+interface CacheEntry {
+  content: string;     // full file content — never truncated
+  timestamp: number;   // ms epoch when we cached it
+  mtimeMs: number;     // file mtime at time of caching (to detect external writes)
+}
 
-const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes — files rarely change during a build session
+const fileReadCache = new Map<string, CacheEntry>();
+
+// Reduced from 30 min to 3 min. Files change frequently during a build session.
+const CACHE_TTL_MS = 3 * 60 * 1000;
+
+// Paths invalidated by recent write/edit operations within this session.
+const writtenPaths = new Set<string>();
 
 function stringifyToolContent(content: unknown): string {
   if (typeof content === "string") return content;
@@ -150,33 +161,81 @@ function isBlockedPath(filePath: string): { blocked: boolean; reason: string } {
   return { blocked: false, reason: "" };
 }
 
-function getFileSummary(filePath: string, content: string): string {
-  const lines = content.split("\n");
-  const previewLines = lines.slice(0, 10).join("\n");
-  return `[CACHED — already read this session] ${filePath} (${lines.length} lines)\n` +
-    `Preview:\n${previewLines}\n...(${lines.length - 10} more lines)\n` +
-    `→ You already read this file. Use the information you have. Do NOT re-read.`;
+/**
+ * Get the file's mtime in milliseconds, or -1 if the file doesn't exist.
+ */
+async function getFileMtimeMs(filePath: string): Promise<number> {
+  try {
+    const stat = await fs.stat(filePath);
+    return stat.mtimeMs;
+  } catch {
+    return -1;
+  }
 }
 
-function isCached(filePath: string): boolean {
+/**
+ * Returns cached content only when:
+ *   1. An entry exists
+ *   2. TTL has not expired
+ *   3. The file has NOT been modified since we cached it (mtime check)
+ *   4. The path was NOT written in this session (explicit invalidation)
+ */
+async function getCachedContent(filePath: string): Promise<string | null> {
+  // Explicit write-invalidation wins immediately
+  if (writtenPaths.has(filePath)) {
+    fileReadCache.delete(filePath);
+    return null;
+  }
+
   const entry = fileReadCache.get(filePath);
-  if (!entry) return false;
+  if (!entry) return null;
+
+  // TTL check
   if (Date.now() - entry.timestamp > CACHE_TTL_MS) {
     fileReadCache.delete(filePath);
-    return false;
+    return null;
   }
-  return true;
+
+  // File-modification check: if the file was changed since we cached it, evict
+  const currentMtime = await getFileMtimeMs(filePath);
+  if (currentMtime > entry.mtimeMs) {
+    fileReadCache.delete(filePath);
+    return null;
+  }
+
+  return entry.content;
 }
 
-function cacheFile(filePath: string, content: string): void {
+async function cacheFile(filePath: string, content: string): Promise<void> {
+  const mtimeMs = await getFileMtimeMs(filePath);
   fileReadCache.set(filePath, {
-    summary: getFileSummary(filePath, content),
+    content,
     timestamp: Date.now(),
+    mtimeMs,
   });
+}
+
+/**
+ * Mark a path as written so any subsequent read_file is forced to re-read from disk.
+ * Called when write_file, edit_file, or apply_file_batch are executed.
+ */
+function invalidateWrittenPath(rawPath: string): void {
+  // Normalize to forward slashes for consistent key matching
+  const normalized = rawPath.replace(/\\/g, "/");
+  writtenPaths.add(normalized);
+  writtenPaths.add(rawPath); // keep the original too for safety
+
+  // Also evict from in-memory read cache
+  for (const key of fileReadCache.keys()) {
+    if (key.replace(/\\/g, "/") === normalized) {
+      fileReadCache.delete(key);
+    }
+  }
 }
 
 export function resetContextGuardCache(): void {
   fileReadCache.clear();
+  writtenPaths.clear();
 }
 
 export const contextGuardMiddleware = createMiddleware({
@@ -188,7 +247,7 @@ export const contextGuardMiddleware = createMiddleware({
   ) => {
     const { name: toolName, args } = request.toolCall;
 
-    // Block directory listing on excluded directories
+    // ── Block directory listing on excluded directories ─────────────────────
     if (toolName === "list_dir" || toolName === "ls" || toolName === "glob") {
       const targetPath = (args["path"] ?? args["directory"] ?? args["pattern"] ?? "") as string;
       const { blocked, reason } = isBlockedPath(targetPath);
@@ -202,7 +261,7 @@ export const contextGuardMiddleware = createMiddleware({
       }
     }
 
-    // Block read_file on excluded paths
+    // ── Block read_file on excluded paths; serve full content from cache ────
     if (toolName === "read_file") {
       const filePath = (args["file_path"] ?? args["path"] ?? "") as string;
 
@@ -216,18 +275,36 @@ export const contextGuardMiddleware = createMiddleware({
         });
       }
 
-      // Return cached summary for duplicate reads
-      if (isCached(filePath)) {
-        const cached = fileReadCache.get(filePath)!;
+      // Return FULL cached content (no truncation) when the file hasn't changed
+      const cachedContent = await getCachedContent(filePath);
+      if (cachedContent !== null) {
         return new ToolMessage({
           name: toolName,
-          content: cached.summary,
+          content: cachedContent,
           tool_call_id: (request.toolCall as any).id || "unknown",
         });
       }
     }
 
-    // Auto-fix write_todos: LLMs sometimes stringify the array or use wrong status values
+    // ── Invalidate cache for write/edit operations ───────────────────────────
+    if (toolName === "write_file" || toolName === "edit_file") {
+      const filePath = (args["file_path"] ?? args["path"] ?? "") as string;
+      if (filePath) invalidateWrittenPath(filePath);
+    }
+
+    // apply_file_batch carries an array of operations
+    if (toolName === "apply_file_batch") {
+      const operations = args["operations"];
+      if (Array.isArray(operations)) {
+        for (const op of operations) {
+          if (op && typeof op === "object" && typeof op.filePath === "string") {
+            invalidateWrittenPath(op.filePath);
+          }
+        }
+      }
+    }
+
+    // ── Auto-fix write_todos ─────────────────────────────────────────────────
     if (toolName === "write_todos") {
       let todos = args["todos"];
       if (typeof todos === "string") {
@@ -249,24 +326,21 @@ export const contextGuardMiddleware = createMiddleware({
       }
     }
 
-    // Execute the actual tool call
+    // ── Execute the actual tool call ─────────────────────────────────────────
     const result = normalizeToolResultContent(await handler(request)) as any;
 
-    // Cache read_file results for deduplication
+    // ── Cache the full read_file content after a live read ───────────────────
     if (toolName === "read_file" && result) {
       const filePath = (args["file_path"] ?? args["path"] ?? "") as string;
       const content = typeof result === "string"
         ? result
         : (result?.content ?? result?.update?.messages?.at?.(-1)?.content ?? result?.messages?.at?.(-1)?.content ?? "");
       if (typeof content === "string" && content.length > 0) {
-        cacheFile(filePath, content);
+        await cacheFile(filePath, content);
       }
     }
 
     return result;
-
-    // --- Post-write: auto tsc check for TypeScript files ---
-    // Disabled for now — will enable after testing the basic middleware flow
   },
 });
 

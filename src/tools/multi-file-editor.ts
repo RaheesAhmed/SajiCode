@@ -61,11 +61,30 @@ const PROTECTED_FILE_NAMES = new Set([
   ".env.development",
 ]);
 
+/**
+ * Extensions where we enforce a line-count cap.
+ * HTML, CSS, SCSS, and other template/style files are intentionally excluded
+ * because they are data/layout files, not source-logic modules, and can
+ * legitimately exceed 800 lines without creating maintenance problems.
+ */
 const SOURCE_EXTENSIONS = new Set([
   ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs",
   ".py", ".go", ".rs", ".java", ".rb", ".php",
-  ".css", ".scss", ".less", ".vue", ".svelte", ".html",
+  ".vue", ".svelte",
 ]);
+
+/**
+ * Hard ceiling: files above this line count are rejected outright.
+ * Raised from 300 → 800 so that a feature module, a large React component,
+ * or a complete Python service can be written as a single cohesive file when
+ * splitting would harm readability.
+ */
+const MAX_LINES_HARD = 800;
+
+/**
+ * Soft ceiling: files above this threshold get a non-blocking warning in the
+ * batch result so the agent is nudged toward splitting without being blocked.
+ */
 
 function normalizeRelativePath(projectPath: string, filePath: string): { absolutePath: string; relativePath: string } {
   const absoluteProject = path.resolve(projectPath);
@@ -200,8 +219,12 @@ async function prepareBatch(
     const lines = operationLineCount(operation);
     const ext = path.extname(normalized.relativePath).toLowerCase();
 
-    if (SOURCE_EXTENSIONS.has(ext) && lines >= 300) {
-      throw new Error(`File ${normalized.relativePath} has ${lines} lines. Split files at under 300 lines.`);
+    if (SOURCE_EXTENSIONS.has(ext) && lines >= MAX_LINES_HARD) {
+      throw new Error(
+        `File ${normalized.relativePath} has ${lines} lines which exceeds the ${MAX_LINES_HARD}-line ceiling. ` +
+        `Split it into focused modules. ` +
+        `HTML, CSS, and SCSS files are exempt from this limit.`
+      );
     }
 
     return {

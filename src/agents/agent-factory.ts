@@ -80,7 +80,11 @@ WORKFLOW:
   6. On any failure: call analyze_error_recovery with the exact error, apply the recommendation, then record_experience
   7.  update_session_state
 
-LIMITS: Each file must stay under 300 lines. Split larger files into modules yourself.`;
+FILE SIZE GUIDANCE:
+  • Target < 500 lines per logic/code file (TypeScript, Python, Go, etc.)
+  • Hard ceiling: 800 lines for code files — split at that point into focused modules
+  • HTML, CSS, SCSS, data/template files: NO line limit — write the complete file in one shot
+  • When splitting: one responsibility per file, shared types in types/ or interfaces/`;
 }
 
 /** Scaffolding block for leads that create new projects */
