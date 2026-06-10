@@ -55,17 +55,17 @@ jobs:
 
       - name: Install dependencies
         run: npm install
-        working-directory: ./next 
+    
       - name: Build Next.js static site
 
         run: npx next build
-        working-directory: ./next 
+
 
 
       - name: Upload production artifact
         uses: actions/upload-pages-artifact@v3
-        with:
-         path: ./next/out 
+        
+
 
   deploy:
     environment:
