@@ -1,5 +1,5 @@
 import { createDeepAgent, CompositeBackend, StoreBackend } from "deepagents";
-import { SafeShellBackend } from "../tools/shell-wrapper.js";
+import { SafeShellBackend, createExecuteTool } from "../tools/shell-wrapper.js";
 import { MemorySaver } from "@langchain/langgraph";
 import { InMemoryStore } from "@langchain/langgraph-checkpoint";
 import type { ProjectConfig, OnboardingResult, HumanInTheLoopConfig } from "../types/index.js";
@@ -107,6 +107,7 @@ export async function createSajiCode(
     rootDir: config.projectPath,
     projectPath: config.projectPath,
   });
+  const executeTool = createExecuteTool(shellBackend);
 
   // Create streaming execute tool for shell commands with progress events
   
@@ -124,6 +125,7 @@ export async function createSajiCode(
       { "/memories/": new StoreBackend(agentConfig) },
     ),
     tools: [
+      executeTool,
       ...contextTools,
       repoMapTool,
       createWebSearchTool(),

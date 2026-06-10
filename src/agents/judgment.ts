@@ -170,27 +170,6 @@ Delegate this implementation to the responsible lead agent instead.`;
       }
     }
 
-    if (toolName === "execute" || toolName === "bash") {
-      const command = (args["command"] ?? args["bash"] ?? "") as string;
-      const msg = `[JUDGMENT BLOCKED] PM Agent cannot run shell commands.
-
-PM responsibilities:
-1. Plan, create Markdown context, and delegate
-2. Ask specialist leads to run setup/build/test/server commands
-3. Use artifacts and tool results to coordinate next steps
-
-Blocked command: ${command}
-Delegate this command to the responsible lead agent instead.`;
-      console.log(chalk.red(`  ✗ BLOCKED: PM attempted shell execution: ${command}`));
-      return new ToolMessage({
-        name: toolName,
-        content: msg,
-        tool_call_id: (request.toolCall as any).id || "unknown",
-        status: "error"
-      });
-
-    }
-
     const isLooping = recordAndDetectLoop(toolName, args);
     if (isLooping) {
       const msg = `[JUDGMENT WARNING] You have called "${toolName}" with the same arguments ${MAX_REPEATS}+ times in a row. You are stuck in a loop.\n\nSTOP repeating. Do one of:\n1. Try a completely different approach\n2. If truly blocked, call update_project_log with status "blocked" and explain what you tried\n3. Return to PM with a clear description of what is preventing progress`;
