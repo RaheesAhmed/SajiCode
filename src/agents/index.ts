@@ -27,6 +27,13 @@ import { createTaskGraphTools } from "../tools/task-graph-tools.js";
 import { createIntelligenceTools } from "../tools/intelligence-tools.js";
 import { createTeamContextTools } from "../tools/team-context.js";
 import { initThreeLayerMemory, loadPointerIndex, formatPointerIndexForPrompt } from "../memory/three-layer-memory.js";
+import { createGitSessionTools } from "../tools/git-session.js";
+import { createProjectDnaTools } from "../memory/project-dna.js";
+import { createRepoLoaderTools } from "../tools/repo-loader.js";
+import { createContractTools } from "../tools/contract-tools.js";
+import { createPatternTools } from "../memory/pattern-library.js";
+import { createValidationTools } from "../tools/validation-tools.js";
+import { createStandupTools } from "../tools/standup.js";
 
 function buildInterruptOn(
   hitl: HumanInTheLoopConfig | undefined
@@ -136,6 +143,14 @@ export async function createSajiCode(
       
       // Add three-layer memory tools
       ...memoryTools,
+      // Beast-level intelligence tools
+      ...createGitSessionTools(config.projectPath),
+      ...createProjectDnaTools(config.projectPath),
+      createRepoLoaderTools(config.projectPath),
+      ...createContractTools(config.projectPath),
+      ...createPatternTools(config.projectPath),
+      ...createValidationTools(config.projectPath),
+      ...createStandupTools(config.projectPath),
     ] as any,
     subagents: domainHeads as any,
     middleware: [judgmentMiddleware, contextGuardMiddleware] as any,
