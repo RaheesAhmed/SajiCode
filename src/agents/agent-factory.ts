@@ -91,14 +91,26 @@ WORKFLOW:
        Large batches → split by layer: types → implementation → tests, but STILL batch each layer
      Preview with preview_file_batch before auth/server/migration batches of 4+.
      SPEED RULE: A 10-file feature should be 2–3 apply_file_batch calls, not 10 write_file calls.
-  6. On any failure: call analyze_error_recovery with the exact error, apply the recommendation, then record_experience
-  7.  update_session_state
+  6. SELF-HEALING LOOP — after every apply_file_batch, read the validation lines at the bottom:
+       ✅  = clean, move on
+       ⚠️  = errors found — DO NOT skip, DO NOT move on
+     Fix cycle (max 3 attempts):
+       a. Read the EXACT error: file path + line number + error code + message
+       b. Fix ONLY those specific lines — do not rewrite unrelated code
+       c. apply_file_batch the fixed files only
+       d. Check validation result again → repeat until ✅
+     After 3 failed cycles: call analyze_error_recovery with the full error, then
+       write_artifact status="blocked" with exact details — never declare done with errors.
+  7. After ✅ clean: run_build_check for a full project-wide verify, then run_tests if tests exist
+  8. update_session_state, update_agent_memory, update_project_log
 
 FILE SIZE GUIDANCE:
-  • Target < 500 lines per logic/code file (TypeScript, Python, Go, etc.)
+  • Target < 500 lines per logic/code file (TypeScript, Python, Rust, Go, Kotlin, etc.)
   • Hard ceiling: 800 lines for code files — split at that point into focused modules
   • HTML, CSS, SCSS, data/template files: NO line limit — write the complete file in one shot
-  • When splitting: one responsibility per file, shared types in types/ or interfaces/`;
+  • When splitting: one responsibility per file, shared types in types/ or interfaces/
+
+NEVER write_artifact or update_session_state("complete") while ⚠️ errors exist.`;
 }
 
 /** Scaffolding block for leads that create new projects */

@@ -281,82 +281,179 @@ export function createValidationTools(projectPath: string) {
       projectPath?: string;
     }): Promise<string> => {
       const cwd = overridePath ?? projectPath;
+      const isWin = process.platform === "win32";
+      const sh = isWin ? "cmd.exe" : "/bin/sh";
+      const shFlag = isWin ? "/c" : "-c";
 
-      // Try "npm run build" first; fall back to "npx tsc --noEmit" on failure
-      let output = "";
-      let usedCommand = "";
+      // ── Detect project type from root marker files ────────────────────────
+      const { access: fsAccess } = await import("node:fs/promises");
+      const exists = async (f: string) => fsAccess(nodePath.join(cwd, f)).then(() => true, () => false);
 
-      try {
-        const result = await execFileAsync("npm", ["run", "build"], {
-          cwd,
-          timeout: TIMEOUT_MS,
-        });
-        output = (result.stdout ?? "") + (result.stderr ?? "");
-        usedCommand = "npm run build";
-      } catch (buildErr: any) {
-        // npm run build failed — check whether the script exists at all
-        const buildOutput: string =
-          (buildErr.stdout ?? "") + (buildErr.stderr ?? "");
+      type LangCandidate = { marker: string; cmds: string[] };
+      const candidates: LangCandidate[] = [
+        // Node/TypeScript — try npm run build, then tsc --noEmit
+        { marker: "package.json", cmds: ["npm run build", "npx tsc --noEmit --pretty false"] },
+        // Rust
+        { marker: "Cargo.toml", cmds: ["cargo check 2>&1"] },
+        // Go
+        { marker: "go.mod", cmds: ["go build ./..."] },
+        // Python (pyproject / requirements)
+        { marker: "pyproject.toml", cmds: ["python -m py_compile **/*.py || ruff check . || flake8 ."] },
+        { marker: "requirements.txt", cmds: ["python -m compileall . -q"] },
+        // Kotlin/Java — Gradle first, Maven fallback
+        { marker: "build.gradle.kts", cmds: ["./gradlew build -x test 2>&1 || gradlew.bat build -x test 2>&1"] },
+        { marker: "build.gradle",     cmds: ["./gradlew build -x test 2>&1 || gradlew.bat build -x test 2>&1"] },
+        { marker: "pom.xml",          cmds: ["mvn compile -q 2>&1"] },
+      ];
 
-        const missingScript =
-          buildOutput.includes("missing script") ||
-          buildOutput.includes("npm ERR! Missing script");
-
-        if (missingScript) {
-          // Fall back to tsc
-          try {
-            const tscResult = await execFileAsync(
-              "npx",
-              ["tsc", "--noEmit"],
-              { cwd, timeout: TIMEOUT_MS },
-            );
-            output = (tscResult.stdout ?? "") + (tscResult.stderr ?? "");
-            usedCommand = "npx tsc --noEmit";
-          } catch (tscErr: any) {
-            output =
-              (tscErr.stdout ?? "") + (tscErr.stderr ?? "");
-            usedCommand = "npx tsc --noEmit";
-          }
-        } else {
-          output = buildOutput;
-          usedCommand = "npm run build";
+      let chosenCmds: string[] = ["npx tsc --noEmit --pretty false"]; // ultimate fallback
+      for (const c of candidates) {
+        if (await exists(c.marker)) {
+          chosenCmds = c.cmds;
+          break;
         }
       }
 
-      // Count error lines
+      let output = "";
+      let usedCommand = "";
+
+      for (const cmd of chosenCmds) {
+        try {
+          const result = await execFileAsync(sh, [shFlag, cmd], { cwd, timeout: 60_000 });
+          output = ((result.stdout ?? "") + "\n" + (result.stderr ?? "")).trim();
+          usedCommand = cmd;
+          break; // first command that exits 0 = success
+        } catch (err: any) {
+          output = ((err.stdout ?? "") + "\n" + (err.stderr ?? "")).trim();
+          usedCommand = cmd;
+          // If it's the "missing script" npm error, fall through to next command
+          const isMissingScript =
+            output.includes("missing script") ||
+            output.includes("npm ERR! Missing script");
+          if (!isMissingScript) break;
+        }
+      }
+
       const lines = output.split("\n");
-      const errorLines = lines.filter(
-        (l) =>
-          /\berror\b/i.test(l) ||
-          /TS\d{4}/.test(l) ||
-          /error TS/i.test(l),
+      const errorLines = lines.filter((l) =>
+        /\berror\b/i.test(l) || /TS\d{4}/.test(l) || /^E\s/m.test(l),
       );
 
       if (errorLines.length === 0) {
-        return `OK Build passed (${usedCommand})`;
+        return `✅ Build passed (${usedCommand})`;
       }
 
-      const preview = errorLines.slice(0, 20).join("\n");
-      return (
-        `FAIL Build failed: ${errorLines.length} error(s) (${usedCommand})\n` +
-        preview
-      );
+      const preview = errorLines.slice(0, 25).join("\n");
+      const moreCount = Math.max(0, errorLines.length - 25);
+      return [
+        `❌ Build failed: ${errorLines.length} error(s) (${usedCommand})`,
+        preview,
+        ...(moreCount > 0 ? [`... ${moreCount} more`] : []),
+      ].join("\n");
     },
     {
       name: "run_build_check",
       description:
-        "Runs the project build check. Attempts 'npm run build' first; if no build script " +
-        "exists falls back to 'npx tsc --noEmit'. Returns a summary with up to 20 error lines.",
+        "Auto-detects the project language (TypeScript/Node, Python, Rust, Go, Kotlin/Java) " +
+        "and runs the appropriate build/type-check command. " +
+        "Returns a ✅/❌ summary with up to 25 error lines. Call after writing code to verify correctness.",
       schema: z.object({
         projectPath: z
           .string()
           .optional()
-          .describe(
-            "Absolute path to the project root. Defaults to the agent project path.",
-          ),
+          .describe("Absolute path to the project root. Defaults to the agent project path."),
       }),
     },
   );
 
-  return [validateFileTool, runBuildCheckTool];
+  const runTestsTool = tool(
+    async ({
+      directory,
+      pattern,
+      command,
+    }: {
+      directory?: string;
+      pattern?: string;
+      command?: string;
+    }): Promise<string> => {
+      const cwd = directory ?? projectPath;
+      const isWin = process.platform === "win32";
+      const sh = isWin ? "cmd.exe" : "/bin/sh";
+      const shFlag = isWin ? "/c" : "-c";
+
+      // ── Auto-detect test runner ───────────────────────────────────────────
+      const { access: fsAccess, readFile: readF } = await import("node:fs/promises");
+      const exists = async (f: string) => fsAccess(nodePath.join(cwd, f)).then(() => true, () => false);
+
+      let testCmd = command;
+      if (!testCmd) {
+        if (await exists("package.json")) {
+          try {
+            const pkg = JSON.parse(await readF(nodePath.join(cwd, "package.json"), "utf-8"));
+            const hasTest = pkg.scripts?.test && !pkg.scripts.test.includes("no test specified");
+            testCmd = hasTest
+              ? (pattern ? `npm test -- ${pattern}` : "npm test")
+              : (pattern ? `npx vitest run ${pattern}` : "npx vitest run");
+          } catch {
+            testCmd = "npm test";
+          }
+        } else if (await exists("Cargo.toml")) {
+          testCmd = pattern ? `cargo test ${pattern}` : "cargo test";
+        } else if (await exists("go.mod")) {
+          testCmd = pattern ? `go test ./... -run ${pattern}` : "go test ./... -v";
+        } else if (await exists("pyproject.toml") || await exists("pytest.ini") || await exists("setup.py")) {
+          testCmd = pattern ? `pytest ${pattern} -v` : "pytest -v";
+        } else if (await exists("requirements.txt")) {
+          testCmd = pattern ? `pytest ${pattern} -v` : "pytest -v";
+        } else if (await exists("build.gradle.kts") || await exists("build.gradle")) {
+          testCmd = "./gradlew test 2>&1 || gradlew.bat test 2>&1";
+        } else if (await exists("pom.xml")) {
+          testCmd = "mvn test -q 2>&1";
+        } else {
+          testCmd = "npm test";
+        }
+      }
+
+      try {
+        const result = await execFileAsync(sh, [shFlag, testCmd], { cwd, timeout: 120_000 });
+        const out = ((result.stdout ?? "") + "\n" + (result.stderr ?? "")).trim();
+        const snippet = out.slice(0, 3_000);
+        return `✅ Tests passed\n${snippet}`;
+      } catch (err: any) {
+        const out = ((err.stdout ?? "") + "\n" + (err.stderr ?? "")).trim();
+        const lines = out.split("\n");
+        // Capture failure summary from Jest/Vitest/pytest/cargo/Go/Gradle
+        const failLines = lines.filter((l) =>
+          /FAIL |● |FAILED|AssertionError|Error:|FAILED\s|panicked|FAIL\t/i.test(l) ||
+          l.includes("failing") ||
+          l.includes("test result: FAILED"),
+        );
+        const summary = failLines.slice(0, 30).join("\n");
+        return `❌ Tests failed\n${summary || out.slice(0, 2_000)}`;
+      }
+    },
+    {
+      name: "run_tests",
+      description:
+        "Auto-detects the project test runner (Jest/Vitest, pytest, cargo test, go test, Gradle, Maven) " +
+        "and runs the test suite. Returns ✅/❌ summary with failure details. " +
+        "Use after writing code or test files to verify correctness.",
+      schema: z.object({
+        directory: z
+          .string()
+          .optional()
+          .describe("Absolute path to run tests in (default: project root)"),
+        pattern: z
+          .string()
+          .optional()
+          .describe("Test name/file pattern to run a subset (e.g. 'auth', 'TestUserCreate')"),
+        command: z
+          .string()
+          .optional()
+          .describe("Custom test command — overrides auto-detection entirely"),
+      }),
+    },
+  );
+
+  return [validateFileTool, runBuildCheckTool, runTestsTool];
 }

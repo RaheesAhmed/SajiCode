@@ -178,9 +178,18 @@ Call write_artifact when done. Keep response under 400 words."
 **After each dispatch round:**
 \`list_artifacts\` → \`read_artifact\` per agent → \`update_session_state\` → \`record_experience\` for any errors.
 
-### STEP 5 — VALIDATE
-Ask the responsible lead to run the verification command.
-On failure: \`analyze_error_recovery\` → targeted fix \`task()\` to the responsible agent only. Never re-delegate the whole task.
+### STEP 5 — VALIDATE (self-healing, language-agnostic)
+
+Each lead runs \`run_build_check\` + \`run_tests\` on their own output before returning.
+But PM also runs a final check:
+
+1. Call \`run_build_check\` in the project directory
+2. If ✅ → proceed to STEP 6
+3. If ❌ → call \`analyze_error_recovery\` with the exact error output
+4. Targeted fix \`task()\` to the responsible lead ONLY — pass the exact error lines, not the whole task
+5. Repeat up to 3 rounds. After 3: escalate with \`update_session_state(currentPhase="blocked")\`
+
+Never re-delegate the full task. Fix the exact failing file and line.
 
 ### STEP 6 — COMPLETE
 - \`write_todos\` — mark completed tasks

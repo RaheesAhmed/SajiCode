@@ -2,8 +2,12 @@ import { tool, type ToolRuntime } from "@langchain/core/tools";
 import { z } from "zod";
 import fs from "fs/promises";
 import path from "path";
+import { execFile } from "child_process";
+import { promisify } from "util";
 import { PredictiveAnalyzer } from "../agents/predictive-analysis.js";
 import { getSnapshotIndex, saveSnapshotIndex } from "./file-tracker.js";
+
+const execFileAsync = promisify(execFile);
 
 type FileOperationType = "write" | "replace" | "append" | "prepend";
 
@@ -309,6 +313,125 @@ function formatPlan(plan: BatchPlan): string {
   return lines.join("\n");
 }
 
+// ── Language detection for inline post-write validation ───────────────────────
+
+const LANG_EXTENSIONS: Record<string, string[]> = {
+  typescript: [".ts", ".tsx"],
+  javascript: [".js", ".jsx", ".mjs", ".cjs"],
+  python:     [".py"],
+  rust:       [".rs"],
+  go:         [".go"],
+  kotlin:     [".kt", ".kts"],
+  java:       [".java"],
+};
+
+function detectLanguages(relPaths: string[]): Set<string> {
+  const langs = new Set<string>();
+  for (const rp of relPaths) {
+    const ext = path.extname(rp).toLowerCase();
+    for (const [lang, exts] of Object.entries(LANG_EXTENSIONS)) {
+      if (exts.includes(ext)) langs.add(lang);
+    }
+  }
+  return langs;
+}
+
+async function fileExists(p: string): Promise<boolean> {
+  try { await fs.access(p); return true; } catch { return false; }
+}
+
+/**
+ * Runs a lightweight post-write validation appropriate for the detected languages.
+ * Returns a short summary string to append to the batch result.
+ * Never throws — always returns a string.
+ */
+async function runInlineValidation(
+  projectPath: string,
+  changedFiles: string[],
+): Promise<string> {
+  const langs = detectLanguages(changedFiles);
+  if (langs.size === 0) return "";
+
+  const isWin = process.platform === "win32";
+  const sh = isWin ? "cmd.exe" : "/bin/sh";
+  const shFlag = isWin ? "/c" : "-c";
+
+  const run = async (cmd: string): Promise<{ ok: boolean; output: string }> => {
+    try {
+      const r = await execFileAsync(sh, [shFlag, cmd], { cwd: projectPath, timeout: 30_000 });
+      return { ok: true, output: ((r.stdout ?? "") + (r.stderr ?? "")).trim() };
+    } catch (e: any) {
+      return { ok: false, output: ((e.stdout ?? "") + (e.stderr ?? "")).trim() };
+    }
+  };
+
+  const results: string[] = [];
+
+  // TypeScript
+  if ((langs.has("typescript") || langs.has("javascript")) &&
+      await fileExists(path.join(projectPath, "tsconfig.json"))) {
+    const { ok, output } = await run("npx tsc --noEmit --pretty false 2>&1");
+    if (ok) {
+      results.push("✅ TypeScript: clean");
+    } else {
+      const errLines = output.split("\n")
+        .map(l => l.trim())
+        .filter(l => l && (l.includes("error TS") || l.includes(": error")));
+      // Only show errors in files we just wrote
+      const relevant = errLines.filter(l =>
+        changedFiles.some(f => l.includes(path.basename(f)) || l.includes(f.replace(/\\/g, "/")))
+      );
+      const display = (relevant.length > 0 ? relevant : errLines).slice(0, 20);
+      const more = Math.max(0, display.length < errLines.length ? errLines.length - 20 : 0);
+      results.push(
+        `⚠️  TypeScript: ${errLines.length} error(s) in written files — fix before declaring done:`,
+        ...display.map(l => `   ${l}`),
+        ...(more > 0 ? [`   ... ${more} more`] : []),
+      );
+    }
+  }
+
+  // Python
+  if (langs.has("python")) {
+    const pyFiles = changedFiles.filter(f => f.endsWith(".py")).map(f =>
+      path.isAbsolute(f) ? f : path.join(projectPath, f)
+    ).join(" ");
+    if (pyFiles) {
+      const { ok, output } = await run(`python -m py_compile ${pyFiles} 2>&1`);
+      results.push(ok ? "✅ Python: syntax clean" : `⚠️  Python syntax errors:\n   ${output.slice(0, 500)}`);
+    }
+  }
+
+  // Rust
+  if (langs.has("rust") && await fileExists(path.join(projectPath, "Cargo.toml"))) {
+    const { ok, output } = await run("cargo check 2>&1");
+    if (ok) {
+      results.push("✅ Rust: cargo check clean");
+    } else {
+      const errLines = output.split("\n").filter(l => /^error/i.test(l.trim())).slice(0, 10);
+      results.push(`⚠️  Rust errors:\n${errLines.map(l => `   ${l}`).join("\n")}`);
+    }
+  }
+
+  // Go
+  if (langs.has("go") && await fileExists(path.join(projectPath, "go.mod"))) {
+    const { ok, output } = await run("go build ./... 2>&1");
+    results.push(ok ? "✅ Go: build clean" : `⚠️  Go build errors:\n   ${output.slice(0, 500)}`);
+  }
+
+  // Kotlin/Java (Gradle)
+  if ((langs.has("kotlin") || langs.has("java")) &&
+      (await fileExists(path.join(projectPath, "build.gradle.kts")) ||
+       await fileExists(path.join(projectPath, "build.gradle")))) {
+    const gradleCmd = isWin ? "gradlew.bat compileKotlin 2>&1" : "./gradlew compileKotlin 2>&1";
+    const { ok, output } = await run(gradleCmd);
+    results.push(ok ? "✅ Kotlin: compile clean" : `⚠️  Kotlin errors:\n   ${output.slice(0, 500)}`);
+  }
+
+  if (results.length === 0) return "";
+  return "\n" + results.join("\n");
+}
+
 export function createMultiFileEditorTools(projectPath: string) {
   const operationSchema = z.object({
     type: z.enum(["write", "replace", "append", "prepend"]),
@@ -423,6 +546,10 @@ export function createMultiFileEditorTools(projectPath: string) {
               lines.push(`- [${issue.severity}] ${issue.filePath}: ${issue.category} - ${issue.message}`);
             }
           }
+
+          // ── Inline post-write validation (TypeScript, Python, Rust, Go, Kotlin) ──
+          const validationSummary = await runInlineValidation(projectPath, changed);
+          if (validationSummary) lines.push(validationSummary);
 
           return lines.join("\n");
         } catch (error) {
