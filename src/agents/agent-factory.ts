@@ -3,6 +3,12 @@ import { SafeShellBackend } from "../tools/shell-wrapper.js";
 import type { CompiledSubAgent } from "deepagents";
 import { MemorySaver } from "@langchain/langgraph";
 import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
+import {
+  toolRetryMiddleware,
+  modelRetryMiddleware,
+  contextEditingMiddleware,
+  ClearToolUsesEdit,
+} from "langchain";
 import { getPlatformPrompt } from "../utils/platform.js";
 import { getAllSkillPaths } from "../utils/skills.js";
 import {
@@ -178,7 +184,17 @@ export async function createAgentFromSpec(
     tools: tools as any,
     subagents: [],
     systemPrompt: fullPrompt,
-    middleware: [leadJudgmentMiddleware, contextGuardMiddleware] as any,
+    middleware: [
+      // Infrastructure: context management + resilience (outermost wrappers)
+      contextEditingMiddleware({
+        edits: [new ClearToolUsesEdit({ triggerTokens: 500_000, keep: { messages: 6 } })],
+      }),
+      modelRetryMiddleware({ maxRetries: 2, initialDelayMs: 1_000 }),
+      toolRetryMiddleware({ maxRetries: 2, initialDelayMs: 500, onFailure: "continue" }),
+      // Business logic: enforcement guards (innermost — run closest to tool calls)
+      leadJudgmentMiddleware,
+      contextGuardMiddleware,
+    ] as any,
   });
 
   return { name: spec.name, description: spec.description, runnable: agent };

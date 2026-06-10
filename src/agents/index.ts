@@ -17,6 +17,13 @@ import { createContextBriefingTool } from "../tools/context-briefing.js";
 import { createExperienceTools } from "../tools/experience-tools.js";
 import { createSessionStateTools } from "../memory/session-state.js";
 import { contextGuardMiddleware } from "./context-guard.js";
+import {
+  summarizationMiddleware,
+  toolRetryMiddleware,
+  modelRetryMiddleware,
+  contextEditingMiddleware,
+  ClearToolUsesEdit,
+} from "langchain";
 import { createGitTools } from "../tools/git-tools.js";
 import { createFileTrackerTools } from "../tools/file-tracker.js";
 
@@ -155,7 +162,20 @@ export async function createSajiCode(
       ...createStandupTools(config.projectPath),
     ] as any,
     subagents: domainHeads as any,
-    middleware: [judgmentMiddleware, contextGuardMiddleware] as any,
+    middleware: [
+      // Context compression: summarize at 75% context to keep PM sessions from overflowing
+      summarizationMiddleware({ model, trigger: { fraction: 0.75 }, keep: { messages: 30 } }),
+      // Clear old tool results at 500k chars (~125k tokens) — keeps context lean
+      contextEditingMiddleware({
+        edits: [new ClearToolUsesEdit({ triggerTokens: 500_000, keep: { messages: 8 }, excludeTools: ["task"] })],
+      }),
+      // Resilience: auto-retry transient model + tool failures with exponential backoff
+      modelRetryMiddleware({ maxRetries: 2, initialDelayMs: 1_000 }),
+      toolRetryMiddleware({ maxRetries: 2, initialDelayMs: 500, onFailure: "continue" }),
+      // Business logic guards (innermost — run closest to the actual tool calls)
+      judgmentMiddleware,
+      contextGuardMiddleware,
+    ] as any,
     checkpointer,
     skills: getAllSkillPaths() as any,
     ...(interruptOn ? { interruptOn } : {}),
