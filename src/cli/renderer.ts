@@ -639,6 +639,33 @@ export class StreamRenderer {
         break;
       }
 
+      case "apply_file_batch": {
+        const ops: Array<{ type?: string; filePath?: string }> = Array.isArray(args.operations) ? args.operations : [];
+        const batchAgent = agentName ?? "agent";
+        if (this.toolSpinner) {
+          this.toolSpinner.stop();
+          this.toolSpinner = null;
+        }
+        console.log(`  ${CY("┌─")} ${CY.bold("Batch write")} ${GY(`${ops.length} file(s)`)} ${chalk.gray(`by ${batchAgent}`)}`);
+        for (const op of ops.slice(0, 15)) {
+          const opType = String(op.type ?? "write");
+          const opFile = path.basename(String(op.filePath ?? ""));
+          const opColor = opType === "write" ? G : opType === "replace" ? YL : GY;
+          console.log(`  ${CY("│")} ${opColor("●")} ${WH(opFile)} ${GY(opType)}`);
+        }
+        if (ops.length > 15) console.log(`  ${CY("│")} ${GY(`…and ${ops.length - 15} more`)}`);
+        this.startToolSpinner(`Writing ${ops.length} file(s)…`);
+        break;
+      }
+
+      case "preview_file_batch": {
+        const ops: Array<{ filePath?: string }> = Array.isArray(args.operations) ? args.operations : [];
+        if (this.toolSpinner) {
+          this.toolSpinner.text = GY(`Previewing ${ops.length} file(s)…`);
+        }
+        break;
+      }
+
       case "tavily_search_results_json": {
         const query = String(args.query ?? "");
         const short = query.length > 50 ? query.slice(0, 47) + "..." : query;

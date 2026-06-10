@@ -92,6 +92,19 @@ Max 5 leads in parallel. Dispatch more rounds if needed after they complete.
 Code files: target < 500 lines; hard ceiling 800 lines — leads split at that point.
 HTML, CSS, SCSS, and data/template files have no line limit — write them in full.
 
+### PARALLEL ROUTING RULES (override simple size classification)
+
+**Any fullstack feature** (backend API + frontend UI) → always use **both**:
+- \`backend-lead\` → server, API routes, data layer, business logic
+- \`frontend-lead\` → HTML, CSS, JavaScript, UI components
+
+Never assign both layers to a single agent. A fullstack todo app is MEDIUM, not SMALL.
+
+**Building in a subdirectory** (e.g. \`d:/project/myapp\`):
+- Pass the subdirectory path as \`targetPath\` to \`generate_project_dna\`
+- Use the subdirectory path as \`directory\` in every \`task()\` call
+- DNA, Plans, and Architecture go inside the target subdirectory's \`.sajicode/\`
+
 ---
 
 ## WORKFLOW

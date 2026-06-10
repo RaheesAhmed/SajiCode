@@ -206,6 +206,7 @@ export function createProjectDnaTools(projectPath: string) {
       architecture,
       conventions,
       keyDecisions,
+      targetPath,
     }: {
       projectName: string;
       overview: string;
@@ -213,7 +214,9 @@ export function createProjectDnaTools(projectPath: string) {
       architecture: string;
       conventions: string;
       keyDecisions: string;
+      targetPath?: string;
     }) => {
+      const writePath = targetPath ?? projectPath;
       const content = buildFreshDna({
         projectName,
         overview,
@@ -222,13 +225,14 @@ export function createProjectDnaTools(projectPath: string) {
         conventions,
         keyDecisions,
       });
-      await writeProjectDna(projectPath, content);
-      return `PROJECT.dna generated for "${projectName}" at ${path.join(projectPath, DNA_FILE)}.`;
+      await writeProjectDna(writePath, content);
+      return `PROJECT.dna generated for "${projectName}" at ${path.join(writePath, DNA_FILE)}.`;
     },
     {
       name: "generate_project_dna",
       description:
-        "Create a fresh PROJECT.dna file from scratch with all standard sections pre-populated. Use this when starting a new project or regenerating the DNA from scratch.",
+        "Create a fresh PROJECT.dna file from scratch with all standard sections pre-populated. Use this when starting a new project or regenerating the DNA from scratch. " +
+        "If building in a subdirectory (e.g. d:/projects/myapp), pass that path as targetPath so the DNA is saved alongside the project, not in the tool root.",
       schema: z.object({
         projectName: z.string().describe("The name of the project."),
         overview: z
@@ -253,6 +257,12 @@ export function createProjectDnaTools(projectPath: string) {
           .string()
           .describe(
             "Important architectural or product decisions made and the rationale behind them.",
+          ),
+        targetPath: z
+          .string()
+          .optional()
+          .describe(
+            "Absolute path to the project being built. Use when building in a subdirectory different from the sajicode working directory.",
           ),
       }),
     },

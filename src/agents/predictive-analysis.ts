@@ -18,14 +18,30 @@ export interface PredictiveAnalysisInput {
   language?: string;
 }
 
-async function readPackageType(projectPath?: string): Promise<string | null> {
+async function readPackageType(filePath?: string, projectPath?: string): Promise<string | null> {
   if (!projectPath) return null;
-  try {
-    const pkg = JSON.parse(await fs.readFile(path.join(projectPath, "package.json"), "utf-8"));
-    return typeof pkg.type === "string" ? pkg.type : null;
-  } catch {
-    return null;
+
+  // Walk from the file's own directory up toward projectPath, finding the NEAREST
+  // package.json. This prevents reading the tool-host's own package.json when the
+  // agent is building a subfolder project (e.g. fullstack_todo/) that may have its
+  // own package.json with different module settings.
+  const rootDir = path.resolve(projectPath);
+  let searchDir = filePath
+    ? path.dirname(path.isAbsolute(filePath) ? filePath : path.join(projectPath, filePath))
+    : rootDir;
+
+  for (let depth = 0; depth < 10; depth++) {
+    try {
+      const pkg = JSON.parse(await fs.readFile(path.join(searchDir, "package.json"), "utf-8"));
+      return typeof pkg.type === "string" ? pkg.type : null;
+    } catch {
+      const parent = path.dirname(searchDir);
+      // Stop at project root or filesystem root
+      if (parent === searchDir || !path.resolve(searchDir).startsWith(rootDir)) break;
+      searchDir = parent;
+    }
   }
+  return null;
 }
 
 function getLine(code: string, index: number): number {
@@ -59,7 +75,7 @@ export class PredictiveAnalyzer {
   async analyzeBeforeExecution(input: PredictiveAnalysisInput): Promise<PredictedIssue[]> {
     const { code, filePath, projectPath } = input;
     const ext = filePath ? path.extname(filePath).toLowerCase() : "";
-    const packageType = await readPackageType(projectPath);
+    const packageType = await readPackageType(filePath, projectPath);
     const issues: PredictedIssue[] = [];
 
     if (packageType === "module" && ext === ".js" && /\brequire\s*\(/.test(code)) {
