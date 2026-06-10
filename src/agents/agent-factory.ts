@@ -30,6 +30,13 @@ import { createIntelligenceTools } from "../tools/intelligence-tools.js";
 import { createMultiFileEditorTools } from "../tools/multi-file-editor.js";
 import { createTeamContextTools } from "../tools/team-context.js";
 import { MCPClientManager } from "../mcp/MCPClient.js";
+import { createGitSessionTools } from "../tools/git-session.js";
+import { createContractTools } from "../tools/contract-tools.js";
+import { createValidationTools } from "../tools/validation-tools.js";
+import { createRepoLoaderTools } from "../tools/repo-loader.js";
+import { createProjectDnaTools } from "../memory/project-dna.js";
+import { createPatternTools } from "../memory/pattern-library.js";
+import { createStandupTools } from "../tools/standup.js";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -72,11 +79,12 @@ WORKFLOW:
   2. Read the relevant SKILL.md files for your domain BEFORE writing any code
   3. Create all required directories in one execute() call
   4. Before risky code (auth, file I/O, server startup, generated TS), call predict_code_issues and fix high/medium issues
-  5. Write files directly:
-       1 file  → write_file immediately
-       2–3     → apply_file_batch (fastest)
-       4+      → batch by layer: core types → implementation → supporting files
-     Preview with preview_file_batch before auth/server batches of 4+.
+  5. Write files with apply_file_batch BY DEFAULT:
+       1 file  → write_file only if truly isolated (config tweak, hotfix)
+       2+ files → apply_file_batch ALWAYS — never write one file at a time when you know the set
+       Large batches → split by layer: types → implementation → tests, but STILL batch each layer
+     Preview with preview_file_batch before auth/server/migration batches of 4+.
+     SPEED RULE: A 10-file feature should be 2–3 apply_file_batch calls, not 10 write_file calls.
   6. On any failure: call analyze_error_recovery with the exact error, apply the recommendation, then record_experience
   7.  update_session_state
 
@@ -152,6 +160,13 @@ export async function createAgentFromSpec(
     ...createIntelligenceTools(projectPath),
     ...createMultiFileEditorTools(projectPath),
     ...createTeamContextTools(projectPath),
+    ...createGitSessionTools(projectPath),
+    ...createContractTools(projectPath),
+    ...createValidationTools(projectPath),
+    ...createProjectDnaTools(projectPath),
+    ...createPatternTools(projectPath),
+    ...createStandupTools(projectPath),
+    createRepoLoaderTools(projectPath),
   ];
 
   const agent = await createDeepAgent({

@@ -206,9 +206,64 @@ Pick the **minimum** leads needed.
 
 ---
 
+---
+
+## PROJECT DNA
+
+**PROJECT.dna** is the project's persistent brain — read it at every session start, update it at every session end.
+
+| Tool | When |
+|------|------|
+| \`read_project_dna\` | Session start — load the full project knowledge base |
+| \`update_project_dna\` | Session end — update Decisions, Patterns, UnfinishedWork, UserPreferences |
+| \`generate_project_dna\` | First session ever — create the initial DNA from scratch |
+| \`get_patterns\` | Before any planning — inject stack-specific pitfall awareness |
+
+DNA sections to update every session:
+- **UnfinishedWork** — what was NOT completed this session
+- **Patterns Learned** — new pitfalls or patterns discovered
+- **Key Decisions** — major architecture or implementation choices made
+- **Session History** — brief one-liner entry per session
+
+---
+
+## SESSION START PROTOCOL (always run in this order)
+
+1. \`read_session_state\` — check for resumable in-progress work
+2. \`read_memory_index\` — load compact knowledge pointers
+3. \`read_project_dna\` — load full project brain (or \`generate_project_dna\` if first session)
+4. \`generate_standup\` — proactive briefing: recent commits, unfinished work, outdated deps
+5. \`get_patterns({ techStack: [...] })\` — inject known pitfalls for the project's stack
+
+If the DNA shows unfinished work → resume from the last phase. Skip re-planning.
+
+---
+
+## CONTRACT-FIRST PROTOCOL (for MEDIUM/LARGE tasks with 3+ agents)
+
+Before any agent touches code, all agents must agree on boundaries.
+
+**Phase 0 — Draft contracts (parallel):**
+Each agent calls \`draft_contract\` declaring:
+- APIs it exposes
+- Types it exports
+- Files it will write
+- Env vars it needs
+- What it depends on from other agents
+
+**Finalize before Phase 1:**
+PM calls \`finalize_contracts\`. This detects file-write conflicts and locks the registry.
+If conflicts → agents update their drafts and re-finalize.
+
+**Phase 1 — Implement against frozen contracts:**
+Agents call \`read_contracts(agentName="...")\` to see their dependency resolution.
+No agent may claim a file another agent owns.
+
+---
+
 ## ABSOLUTE RULES (non-negotiable)
 
-1. Start every session with \`read_session_state\` + \`read_memory_index\`.
+1. Start every session with SESSION START PROTOCOL (read_session_state → read_memory_index → read_project_dna → generate_standup → get_patterns).
 2. Call \`collect_repo_map\` before planning anything.
 3. Classify task size before delegating.
 4. PM writes Markdown only. All code goes to leads.
@@ -217,5 +272,7 @@ Pick the **minimum** leads needed.
 7. Always call \`prepare_team_context\` + \`generate_context_briefing\` + \`build_dependency_order\` before any delegation.
 8. Every \`task()\` call starts with \`read_team_context(agentName="...")\` + CONTEXT_BRIEFING + CHECK YOUR SKILLS.
 9. Never make agents re-read files already summarized in team context.
+10. Use CONTRACT-FIRST PROTOCOL for MEDIUM/LARGE tasks with 3+ agents.
+11. Update PROJECT.dna (UnfinishedWork + Decisions + Patterns) at every session end.
 `;
 }

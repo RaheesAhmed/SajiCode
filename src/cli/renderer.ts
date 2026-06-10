@@ -681,6 +681,30 @@ export class StreamRenderer {
       return;
     }
 
+    // read_file and write/edit are already displayed by finishPendingTool — skip the raw dump.
+    if (toolName === "read_file" || toolName === "write_file" || toolName === "edit_file") return;
+
+    // Context/memory tools: print one-line status instead of raw content.
+    const QUIET_TOOLS = new Set([
+      "read_session_state", "update_session_state",
+      "read_team_context", "prepare_team_context",
+      "generate_context_briefing",
+      "read_memory_index", "search_transcripts",
+      "append_transcript", "write_memory_topic",
+      "record_experience",
+      "update_agent_memory", "update_project_log",
+      "collect_project_context",
+      "snapshot_file", "undo_file_change", "list_snapshots",
+    ]);
+    if (QUIET_TOOLS.has(toolName)) {
+      const statusText =
+        content.includes("[CACHED") ? "cache hit" :
+        /error|fail|blocked/i.test(content) ? content.slice(0, 80) :
+        content.split(/[.\n]/)[0]?.slice(0, 80) ?? "done";
+      console.log(`  ${color("│")} ${G("✓")} ${icon} ${GY(label)} ${chalk.gray(toolName)} ${GY(statusText)}`);
+      return;
+    }
+
     const shortResult = this.compact(content, toolName === "execute" ? 260 : 160);
     console.log(`  ${color("│")} ${G("✓")} ${icon} ${GY(label)} ${chalk.gray(toolName)} ${GY(shortResult)}`);
   }

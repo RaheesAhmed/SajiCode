@@ -117,7 +117,13 @@ export class ProcessStateManager {
     try {
       const raw = await fs.readFile(this.stateFile, "utf-8");
       const parsed = JSON.parse(raw) as ProcessRecord[];
-      this.records = new Map(parsed.map((r) => [r.hash, r]));
+      // Strip any records whose commands now match NEVER_CACHE_PATTERNS —
+      // they may have been saved before the pattern list was updated.
+      this.records = new Map(
+        parsed
+          .filter((r) => !isNeverCache(r.command))
+          .map((r) => [r.hash, r]),
+      );
       this.cleanStaleRecords();
     } catch {
       this.records = new Map();

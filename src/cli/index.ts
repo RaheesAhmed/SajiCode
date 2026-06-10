@@ -8,6 +8,8 @@ import { generateThreadId } from "../memory/index.js";
 import { augmentInputWithMemoryContext } from "../memory/turn-context.js";
 import { StreamRenderer } from "./renderer.js";
 import { undoFileChange, listRecentSnapshots } from "../tools/file-tracker.js";
+import { startGitSession, getSessionId, createGitSessionTools } from "../tools/git-session.js";
+import { generateStandupBriefing } from "../tools/standup.js";
 
 const ORANGE = chalk.hex("#FF8C00");
 const program = new Command();
@@ -34,6 +36,14 @@ program
 
       if (options.model !== "minimax-m2.5:cloud") {
         config.modelConfig.modelName = options.model;
+      }
+
+      // Start a git session: create branch + before-tag for safe revert
+      try {
+        const sessionId = await startGitSession(projectPath);
+        console.log(chalk.gray(`  Session: ${sessionId} (branch: sajicode/session-${sessionId})`));
+      } catch {
+        // Non-fatal: some projects may not be git repos or have no git installed
       }
 
       const renderer = new StreamRenderer(options.headless);
@@ -211,6 +221,54 @@ program
       console.log(chalk.cyan(result));
     } catch (error) {
       console.error(chalk.red("❌ Failed to list snapshots:"), error);
+      process.exit(1);
+    }
+  });
+
+program
+  .command("standup")
+  .description("Show daily briefing: recent commits, unfinished work, outdated deps, next steps")
+  .option("-p, --path <path>", "Project directory", process.cwd())
+  .action(async (options: { path: string }) => {
+    const projectPath = options.path;
+    try {
+      const briefing = await generateStandupBriefing(projectPath);
+      console.log(chalk.cyan(briefing));
+    } catch (error) {
+      console.error(chalk.red("❌ Failed to generate standup:"), error);
+      process.exit(1);
+    }
+  });
+
+program
+  .command("revert")
+  .description("Revert all agent changes in the current session back to the before-session state")
+  .option("-p, --path <path>", "Project directory", process.cwd())
+  .option("--agent <name>", "Revert only commits made by a specific agent")
+  .option("--session <id>", "Specific session ID to revert (defaults to current session)")
+  .action(async (options: { path: string; agent?: string; session?: string }) => {
+    const projectPath = options.path;
+    const gitTools = createGitSessionTools(projectPath);
+    const revertSessionTool = gitTools[1]!;
+    const revertAgentWorkTool = gitTools[2]!;
+
+    try {
+      if (options.agent) {
+        console.log(chalk.yellow(`  Reverting commits by agent: ${options.agent}...`));
+        const result = await (revertAgentWorkTool as any).invoke({ agentName: options.agent });
+        console.log(chalk.green(result));
+      } else {
+        const sessionId = options.session ?? (await getSessionId(projectPath)) ?? undefined;
+        if (!sessionId) {
+          console.error(chalk.red("❌ No active session found. Use --session to specify a session ID."));
+          process.exit(1);
+        }
+        console.log(chalk.yellow(`  Reverting session: ${sessionId}...`));
+        const result = await (revertSessionTool as any).invoke({ sessionId });
+        console.log(chalk.green(result));
+      }
+    } catch (error) {
+      console.error(chalk.red("❌ Revert failed:"), error);
       process.exit(1);
     }
   });

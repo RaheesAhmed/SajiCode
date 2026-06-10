@@ -3,6 +3,8 @@ import { ToolMessage } from "@langchain/core/messages";
 import { execFile } from "child_process";
 import { promisify } from "util";
 import fs from "fs/promises";
+import path from "path";
+import { scanFileForSecurityIssues } from "../tools/validation-tools.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -175,31 +177,33 @@ async function getFileMtimeMs(filePath: string): Promise<number> {
 
 /**
  * Returns cached content only when:
- *   1. An entry exists
+ *   1. An entry exists for the resolved path
  *   2. TTL has not expired
  *   3. The file has NOT been modified since we cached it (mtime check)
  *   4. The path was NOT written in this session (explicit invalidation)
  */
 async function getCachedContent(filePath: string): Promise<string | null> {
+  const resolved = path.resolve(filePath);
+
   // Explicit write-invalidation wins immediately
-  if (writtenPaths.has(filePath)) {
-    fileReadCache.delete(filePath);
+  if (writtenPaths.has(resolved)) {
+    fileReadCache.delete(resolved);
     return null;
   }
 
-  const entry = fileReadCache.get(filePath);
+  const entry = fileReadCache.get(resolved);
   if (!entry) return null;
 
   // TTL check
   if (Date.now() - entry.timestamp > CACHE_TTL_MS) {
-    fileReadCache.delete(filePath);
+    fileReadCache.delete(resolved);
     return null;
   }
 
   // File-modification check: if the file was changed since we cached it, evict
-  const currentMtime = await getFileMtimeMs(filePath);
+  const currentMtime = await getFileMtimeMs(resolved);
   if (currentMtime > entry.mtimeMs) {
-    fileReadCache.delete(filePath);
+    fileReadCache.delete(resolved);
     return null;
   }
 
@@ -207,9 +211,23 @@ async function getCachedContent(filePath: string): Promise<string | null> {
 }
 
 async function cacheFile(filePath: string, content: string): Promise<void> {
-  const mtimeMs = await getFileMtimeMs(filePath);
-  fileReadCache.set(filePath, {
-    content,
+  const resolved = path.resolve(filePath);
+
+  let actualContent = content;
+  // Deepagents returns a truncated preview when it has its own cache hit:
+  //   "[CACHED — already read this session] /path (N lines) Preview: ..."
+  // Never cache that partial response — read the actual file from disk instead.
+  if (content.includes("[CACHED — already read this session]")) {
+    try {
+      actualContent = await fs.readFile(resolved, "utf-8");
+    } catch {
+      return; // File unreadable — skip caching
+    }
+  }
+
+  const mtimeMs = await getFileMtimeMs(resolved);
+  fileReadCache.set(resolved, {
+    content: actualContent,
     timestamp: Date.now(),
     mtimeMs,
   });
@@ -220,17 +238,9 @@ async function cacheFile(filePath: string, content: string): Promise<void> {
  * Called when write_file, edit_file, or apply_file_batch are executed.
  */
 function invalidateWrittenPath(rawPath: string): void {
-  // Normalize to forward slashes for consistent key matching
-  const normalized = rawPath.replace(/\\/g, "/");
-  writtenPaths.add(normalized);
-  writtenPaths.add(rawPath); // keep the original too for safety
-
-  // Also evict from in-memory read cache
-  for (const key of fileReadCache.keys()) {
-    if (key.replace(/\\/g, "/") === normalized) {
-      fileReadCache.delete(key);
-    }
-  }
+  const resolved = path.resolve(rawPath);
+  writtenPaths.add(resolved);
+  fileReadCache.delete(resolved);
 }
 
 export function resetContextGuardCache(): void {
@@ -286,9 +296,30 @@ export const contextGuardMiddleware = createMiddleware({
       }
     }
 
-    // ── Invalidate cache for write/edit operations ───────────────────────────
+    // ── Security scan + cache invalidation for write/edit operations ────────
     if (toolName === "write_file" || toolName === "edit_file") {
       const filePath = (args["file_path"] ?? args["path"] ?? "") as string;
+      const content = (args["content"] ?? args["new_str"] ?? "") as string;
+
+      if (filePath && content) {
+        const scan = await scanFileForSecurityIssues(filePath, content);
+
+        if (scan.blocks.length > 0) {
+          return new ToolMessage({
+            name: toolName,
+            content: `⛔ SECURITY BLOCK — ${toolName} prevented for "${path.basename(filePath)}":\n${scan.blocks.map((b) => `  • ${b}`).join("\n")}\n\nRemove the flagged content before writing.`,
+            tool_call_id: (request.toolCall as any).id || "unknown",
+            status: "error",
+          });
+        }
+
+        if (scan.warnings.length > 0) {
+          console.warn(
+            `  ⚠️  Security warnings for ${path.basename(filePath)}:\n${scan.warnings.map((w) => `    • ${w}`).join("\n")}`,
+          );
+        }
+      }
+
       if (filePath) invalidateWrittenPath(filePath);
     }
 
