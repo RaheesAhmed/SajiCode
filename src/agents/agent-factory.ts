@@ -10,7 +10,7 @@ import {
   ClearToolUsesEdit,
 } from "langchain";
 import { getPlatformPrompt } from "../utils/platform.js";
-import { getAllSkillPaths } from "../utils/skills.js";
+import { getAllSkillPaths, getSkillPaths } from "../utils/skills.js";
 import {
   loadAgentMemory,
   initAgentMemoryFile,
@@ -54,6 +54,8 @@ export interface AgentSpec {
   forbiddenPaths: string[];
   identity: string;
   systemPrompt: string;
+  /** Skill folder names (e.g. ["nodejs","api-architect"]) — agent only loads these skills */
+  primarySkills?: string[];
 }
 
 
@@ -134,7 +136,9 @@ export async function createAgentFromSpec(
 ): Promise<CompiledSubAgent> {
   const backend = new SafeShellBackend({ rootDir: projectPath, projectPath });
   const platform = getPlatformPrompt(projectPath);
-  const skills = getAllSkillPaths() as any;
+  const skills = (spec.primarySkills && spec.primarySkills.length > 0)
+    ? getSkillPaths(spec.primarySkills) as any
+    : getAllSkillPaths() as any;
 
   await ensureAgentMemoryDir(projectPath);
   await initAgentMemoryFile(
@@ -199,7 +203,7 @@ export async function createAgentFromSpec(
     middleware: [
       // Infrastructure: context management + resilience (outermost wrappers)
       contextEditingMiddleware({
-        edits: [new ClearToolUsesEdit({ triggerTokens: 500_000, keep: { messages: 6 } })],
+        edits: [new ClearToolUsesEdit({ trigger: { tokens: 500_000 }, keep: { messages: 6 } })],
       }),
       modelRetryMiddleware({ maxRetries: 2, initialDelayMs: 1_000 }),
       toolRetryMiddleware({ maxRetries: 2, initialDelayMs: 500, onFailure: "continue" }),

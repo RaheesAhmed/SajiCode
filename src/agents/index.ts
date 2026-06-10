@@ -10,6 +10,7 @@ import { createContextTools } from "../tools/context-tools.js";
 import { createWebSearchTool } from "../tools/web-search.js";
 import { createRepoMapTool } from "../tools/repo-map.js";
 import { createAllDomainHeads } from "./domain-heads.js";
+import { loadAllSpecs, createAgentRegistryTools } from "./agent-registry.js";
 import { createModel } from "../llms/provider.js";
 import { getAllSkillPaths } from "../utils/skills.js";
 import { MCPClientManager } from "../mcp/MCPClient.js";
@@ -18,7 +19,6 @@ import { createExperienceTools } from "../tools/experience-tools.js";
 import { createSessionStateTools } from "../memory/session-state.js";
 import { contextGuardMiddleware } from "./context-guard.js";
 import {
-  summarizationMiddleware,
   toolRetryMiddleware,
   modelRetryMiddleware,
   contextEditingMiddleware,
@@ -97,6 +97,8 @@ export async function createSajiCode(
   await ensureSajiCodeDir(config.projectPath);
 
   const domainHeads = await createAllDomainHeads(model, config.projectPath);
+  const agentSpecs = await loadAllSpecs();
+  const registryTools = createAgentRegistryTools(agentSpecs);
   const interruptOn = buildInterruptOn(config.humanInTheLoop);
 
   const contextBriefingTool = createContextBriefingTool(config.projectPath);
@@ -160,14 +162,14 @@ export async function createSajiCode(
       ...createPatternTools(config.projectPath),
       ...createValidationTools(config.projectPath),
       ...createStandupTools(config.projectPath),
+      // Dynamic agent registry: list_available_agents + pick_best_agent
+      ...registryTools,
     ] as any,
     subagents: domainHeads as any,
     middleware: [
-      // Context compression: summarize at 75% context to keep PM sessions from overflowing
-      summarizationMiddleware({ model, trigger: { fraction: 0.75 }, keep: { messages: 30 } }),
-      // Clear old tool results at 500k chars (~125k tokens) — keeps context lean
+      // Clear old tool results at ~125k tokens — keeps PM context lean without a second LLM call
       contextEditingMiddleware({
-        edits: [new ClearToolUsesEdit({ triggerTokens: 500_000, keep: { messages: 8 }, excludeTools: ["task"] })],
+        edits: [new ClearToolUsesEdit({ trigger: { tokens: 500_000 }, keep: { messages: 8 }, excludeTools: ["task"] })],
       }),
       // Resilience: auto-retry transient model + tool failures with exponential backoff
       modelRetryMiddleware({ maxRetries: 2, initialDelayMs: 1_000 }),
