@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+# Cancel in-progress runs for the same PR/branch so fast-follow pushes
+# don't queue up duplicate runs.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: Build & Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    permissions:
+      contents: read  # read-only — no token write needed for CI
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false  # don't store token in .git/config
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+      - name: Build
+        run: npm run build
+
+      - name: Run tests
+        run: npm test
+        continue-on-error: false
+
+      - name: Check for leftover secrets patterns
+        run: |
+          # Fail if any hardcoded secret patterns are found in source
+          if grep -rE '(sk-[a-zA-Z0-9]{48}|AKIA[0-9A-Z]{16}|ghp_[a-zA-Z0-9]{36}|-----BEGIN (RSA )?PRIVATE KEY-----)' src/ --include='*.ts' --include='*.tsx' --include='*.js'; then
+            echo "::error::Hardcoded secret pattern detected in source files"
+            exit 1
+          fi
+          echo "No hardcoded secrets found."

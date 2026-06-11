@@ -1,0 +1,19 @@
+# CODEOWNERS — every PR requires a review from @RaheesAhmed before it can be merged.
+# GitHub enforces this at the branch-protection level.
+# Docs: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Catch-all: every file in the repo requires owner review
+*                               @RaheesAhmed
+
+# CI/CD workflows are especially sensitive — owner must review any changes
+.github/                        @RaheesAhmed
+
+# Core agent and security logic
+src/agents/                     @RaheesAhmed
+src/tools/                      @RaheesAhmed
+src/cli/                        @RaheesAhmed
+
+# Package config and publish scripts
+package.json                    @RaheesAhmed
+package-lock.json               @RaheesAhmed
+tsconfig.json                   @RaheesAhmed

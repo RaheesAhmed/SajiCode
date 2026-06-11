@@ -1,0 +1,53 @@
+version: 2
+
+updates:
+  # Keep GitHub Actions up to date automatically.
+  # Dependabot opens PRs to pin/update action SHAs.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+    labels:
+      - dependencies
+      - github-actions
+    commit-message:
+      prefix: "ci"
+    reviewers:
+      - RaheesAhmed
+
+  # Keep npm dependencies up to date.
+  # Only opens PRs for patch and minor updates automatically.
+  # Major version bumps require manual review.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - npm
+    commit-message:
+      prefix: "chore(deps)"
+    reviewers:
+      - RaheesAhmed
+    # Group minor + patch updates into a single PR to reduce noise
+    groups:
+      langchain-packages:
+        patterns:
+          - "@langchain/*"
+          - "langchain"
+        update-types:
+          - minor
+          - patch
+      minor-and-patch:
+        update-types:
+          - minor
+          - patch
+    ignore:
+      # Don't auto-bump major versions — those need manual testing
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
