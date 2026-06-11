@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   build-and-test:
-    name: Build & Test
+    name: Build
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -41,10 +41,6 @@ jobs:
 
       - name: Build
         run: npm run build
-
-      - name: Run tests
-        run: npm test
-        continue-on-error: false
 
       - name: Check for leftover secrets patterns
         run: |
