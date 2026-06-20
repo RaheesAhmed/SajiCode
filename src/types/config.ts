@@ -3,6 +3,7 @@ export interface ModelConfig {
   modelName: string;
   temperature?: number;
   maxRetries?: number;
+  maxTokens?: number;
   baseUrl?: string;
   apiKey?: string;
 }

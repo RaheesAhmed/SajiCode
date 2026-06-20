@@ -3,7 +3,6 @@ import type { BaseChatModel } from "@langchain/core/language_models/chat_models"
 import type { ModelConfig } from "../types/index.js";
 import { ChatOpenRouter } from "@langchain/openrouter";
 
-
 export async function createModel(config: ModelConfig): Promise<BaseChatModel> {
   const provider = config.provider.toLowerCase();
 
@@ -22,6 +21,7 @@ export async function createModel(config: ModelConfig): Promise<BaseChatModel> {
         model: config.modelName,
         temperature: config.temperature ?? 0,
         maxRetries: config.maxRetries ?? 3,
+        maxTokens: config.maxTokens ?? 4096,
         apiKey: config.apiKey ?? process.env["OPENAI_API_KEY"],
         configuration: {
           baseURL: config.baseUrl ?? process.env["OPENAI_BASE_URL"],
@@ -34,6 +34,7 @@ export async function createModel(config: ModelConfig): Promise<BaseChatModel> {
       model: config.modelName,
       temperature: config.temperature ?? 0,
       maxRetries: config.maxRetries ?? 3,
+      maxTokens: config.maxTokens ?? 4096,
       apiKey: config.apiKey ?? process.env["OPENROUTER_API_KEY"],
       baseURL: config.baseUrl ?? process.env["OPENROUTER_BASE_URL"],
     });

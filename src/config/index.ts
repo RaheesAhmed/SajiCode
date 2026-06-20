@@ -7,6 +7,7 @@ const DEFAULT_MODEL_CONFIG: ModelConfig = {
   modelName: "minimax-m2.5:cloud",
   temperature: 0,
   maxRetries: 3,
+  maxTokens: 4096,
   baseUrl: "http://localhost:11434",
 };
 
