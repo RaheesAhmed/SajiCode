@@ -23,16 +23,19 @@ export async function createModel(config: ModelConfig): Promise<BaseChatModel> {
         temperature: config.temperature ?? 0,
         maxRetries: config.maxRetries ?? 3,
         apiKey: config.apiKey ?? process.env["OPENAI_API_KEY"],
+        configuration: {
+          baseURL: config.baseUrl ?? process.env["OPENAI_BASE_URL"],
+        },
       });
     }
-    
 
-   case "openrouter":{
+   case "openrouter": {
     return new ChatOpenRouter({
       model: config.modelName,
       temperature: config.temperature ?? 0,
       maxRetries: config.maxRetries ?? 3,
       apiKey: config.apiKey ?? process.env["OPENROUTER_API_KEY"],
+      baseURL: config.baseUrl ?? process.env["OPENROUTER_BASE_URL"],
     });
    }
 
