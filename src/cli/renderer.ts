@@ -666,7 +666,7 @@ export class StreamRenderer {
         break;
       }
 
-      case "tavily_search_results_json": {
+      case "web_search": {
         const query = String(args.query ?? "");
         const short = query.length > 50 ? query.slice(0, 47) + "..." : query;
         if (this.toolSpinner) {
