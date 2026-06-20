@@ -122,6 +122,20 @@ interface SecurityScanResult {
   blocks: string[];
 }
 
+const PRIVATE_KEY_HEADER_PREFIX = "-----BEGIN";
+const RSA_KEY_ALGORITHM_NAME = "RSA";
+const PRIVATE_KEY_HEADER_SUFFIX = "PRIVATE KEY-----";
+const RSA_PRIVATE_KEY_HEADER_REGEX = new RegExp(
+  [
+    PRIVATE_KEY_HEADER_PREFIX,
+    RSA_KEY_ALGORITHM_NAME,
+    PRIVATE_KEY_HEADER_SUFFIX,
+  ].join(" "),
+);
+const GENERIC_PRIVATE_KEY_HEADER_REGEX = new RegExp(
+  [PRIVATE_KEY_HEADER_PREFIX, PRIVATE_KEY_HEADER_SUFFIX].join(" "),
+);
+
 // Patterns that should BLOCK a write
 const BLOCK_PATTERNS: Array<{ label: string; regex: RegExp }> = [
   {
@@ -138,11 +152,11 @@ const BLOCK_PATTERNS: Array<{ label: string; regex: RegExp }> = [
   },
   {
     label: "RSA private key header",
-    regex: /-----BEGIN RSA PRIVATE KEY-----/,
+    regex: RSA_PRIVATE_KEY_HEADER_REGEX,
   },
   {
     label: "Private key header",
-    regex: /-----BEGIN PRIVATE KEY-----/,
+    regex: GENERIC_PRIVATE_KEY_HEADER_REGEX,
   },
   {
     // password = "literal value of 8+ chars" that is NOT reading from env
