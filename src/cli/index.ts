@@ -2,23 +2,9 @@
 
 import fs from "node:fs/promises";
 import path from "node:path";
-import { Command } from "commander";
+import { Command, CommanderError } from "commander";
 import chalk from "chalk";
 import { loadConfig, saveConfig, ensureProjectDir, resolveConfigForDoctor } from "../config/index.js";
-import { createSajiCode, runOnboarding, finalizeSession } from "../agents/index.js";
-import {
-  generateThreadId,
-  saveCurrentThread,
-  loadCurrentThread,
-  threadHasCheckpoint,
-  listRecentThreadIds,
-} from "../memory/index.js";
-import { setAuditProjectPath } from "../agents/context-guard.js";
-import { augmentInputWithMemoryContext } from "../memory/turn-context.js";
-import { StreamRenderer } from "./renderer.js";
-import { undoFileChange, listRecentSnapshots } from "../tools/file-tracker.js";
-import { startGitSession, getSessionId, createGitSessionTools } from "../tools/git-session.js";
-import { generateStandupBriefing } from "../tools/standup.js";
 import {
   listSkillsForDisplay,
   scaffoldSkill,
@@ -44,6 +30,36 @@ import {
 } from "../plugins/registry.js";
 import { formatCostsReport } from "../observability/usage-tracker.js";
 
+/** Heavy agent stack — only load for build/resume/audit, not config-doctor. */
+async function loadAgentRuntime() {
+  const [agents, memory, rendererMod, turnContext, gitSession, contextGuard] =
+    await Promise.all([
+      import("../agents/index.js"),
+      import("../memory/index.js"),
+      import("./renderer.js"),
+      import("../memory/turn-context.js"),
+      import("../tools/git-session.js"),
+      import("../agents/context-guard.js"),
+    ]);
+
+  return {
+    createSajiCode: agents.createSajiCode,
+    runOnboarding: agents.runOnboarding,
+    finalizeSession: agents.finalizeSession,
+    generateThreadId: memory.generateThreadId,
+    saveCurrentThread: memory.saveCurrentThread,
+    loadCurrentThread: memory.loadCurrentThread,
+    threadHasCheckpoint: memory.threadHasCheckpoint,
+    listRecentThreadIds: memory.listRecentThreadIds,
+    StreamRenderer: rendererMod.StreamRenderer,
+    augmentInputWithMemoryContext: turnContext.augmentInputWithMemoryContext,
+    startGitSession: gitSession.startGitSession,
+    getSessionId: gitSession.getSessionId,
+    createGitSessionTools: gitSession.createGitSessionTools,
+    setAuditProjectPath: contextGuard.setAuditProjectPath,
+  };
+}
+
 const ORANGE = chalk.hex("#FF8C00");
 const program = new Command();
 
@@ -60,6 +76,18 @@ program
   .option("-p, --path <path>", "Project directory", process.cwd())
   .option("-H, --headless", "Run in headless mode (no UI, ideal for CI/CD)", false)
   .action(async (promptParts: string[], options: { model: string; path: string; headless: boolean }) => {
+    const {
+      createSajiCode,
+      runOnboarding,
+      finalizeSession,
+      generateThreadId,
+      saveCurrentThread,
+      StreamRenderer,
+      augmentInputWithMemoryContext,
+      startGitSession,
+      setAuditProjectPath,
+    } = await loadAgentRuntime();
+
     const projectPath = options.path;
     const userPrompt = promptParts.join(" ").trim() || undefined;
 
@@ -195,6 +223,12 @@ program
   .command("audit")
   .description("Run the Security Agent on the current codebase")
   .action(async () => {
+    const {
+      createSajiCode,
+      generateThreadId,
+      StreamRenderer,
+    } = await loadAgentRuntime();
+
     const projectPath = process.cwd();
     const config = await loadConfig(projectPath);
     const renderer = new StreamRenderer();
@@ -211,7 +245,7 @@ program
     };
 
     try {
-      const { agent, sessionConfig } = await createSajiCode({
+      const { agent, sessionConfig, mcpClient } = await createSajiCode({
         config,
         onboardingResult,
         threadId: generateThreadId(),
@@ -233,6 +267,7 @@ program
 
       await renderer.processMultiStream(stream as any);
       renderer.printComplete();
+      await mcpClient.close();
     } catch (error) {
       renderer.printError(error instanceof Error ? error : new Error(String(error)));
       process.exit(1);
@@ -244,6 +279,7 @@ program
   .description("Undo the last file change made by an agent")
   .argument("<file>", "Path to the file to restore")
   .action(async (file: string) => {
+    const { undoFileChange } = await import("../tools/file-tracker.js");
     const projectPath = process.cwd();
     try {
       const result = await undoFileChange(projectPath, file);
@@ -258,6 +294,7 @@ program
   .command("snapshots")
   .description("List recent file snapshots taken by agents")
   .action(async () => {
+    const { listRecentSnapshots } = await import("../tools/file-tracker.js");
     const projectPath = process.cwd();
     try {
       const result = await listRecentSnapshots(projectPath);
@@ -273,6 +310,7 @@ program
   .description("Show daily briefing: recent commits, unfinished work, outdated deps, next steps")
   .option("-p, --path <path>", "Project directory", process.cwd())
   .action(async (options: { path: string }) => {
+    const { generateStandupBriefing } = await import("../tools/standup.js");
     const projectPath = options.path;
     try {
       const briefing = await generateStandupBriefing(projectPath);
@@ -290,6 +328,7 @@ program
   .option("--agent <name>", "Revert only commits made by a specific agent")
   .option("--session <id>", "Specific session ID to revert (defaults to current session)")
   .action(async (options: { path: string; agent?: string; session?: string }) => {
+    const { createGitSessionTools, getSessionId } = await import("../tools/git-session.js");
     const projectPath = options.path;
     const gitTools = createGitSessionTools(projectPath);
     const revertSessionTool = gitTools[1]!;
@@ -329,6 +368,17 @@ program
     headless: boolean;
     message?: string;
   }) => {
+    const {
+      createSajiCode,
+      loadCurrentThread,
+      listRecentThreadIds,
+      threadHasCheckpoint,
+      saveCurrentThread,
+      StreamRenderer,
+      augmentInputWithMemoryContext,
+      setAuditProjectPath,
+    } = await loadAgentRuntime();
+
     const projectPath = options.path;
 
     try {
@@ -672,4 +722,14 @@ function buildInitialMessage(result: import("../types/index.js").OnboardingResul
   return lines.join("\n");
 }
 
-program.parse();
+program.parseAsync(process.argv)
+  .then(() => {
+    process.exit(0);
+  })
+  .catch((error: unknown) => {
+    if (error instanceof CommanderError) {
+      process.exit(error.code === "commander.helpDisplayed" ? 0 : 1);
+    }
+    console.error(error);
+    process.exit(1);
+  });
