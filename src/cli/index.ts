@@ -839,6 +839,200 @@ program
     process.on("SIGTERM", () => void shutdown());
   });
 
+const daemonCmd = program
+  .command("daemon")
+  .description("Long-running daemon (serve + task queue + heartbeat)");
+
+daemonCmd
+  .command("start")
+  .description("Start the always-on daemon")
+  .option("-p, --path <path>", "Project directory", process.cwd())
+  .option("--port <port>", "HTTP port", "3920")
+  .option("--host <host>", "Bind address", "127.0.0.1")
+  .option("--whatsapp", "Attach WhatsApp channel when enabled in config", false)
+  .option("--telegram", "Attach Telegram bot (TELEGRAM_BOT_TOKEN env)", false)
+  .option("--slack", "Attach Slack events (SLACK_BOT_TOKEN + SLACK_SIGNING_SECRET env)", false)
+  .option("--offline", "Air-gapped mode: Ollama only", false)
+  .action(async (options: {
+    path: string;
+    port: string;
+    host: string;
+    whatsapp: boolean;
+    telegram: boolean;
+    slack: boolean;
+    offline: boolean;
+  }) => {
+    const { startDaemon } = await import("../daemon/index.js");
+    const projectPath = path.resolve(options.path);
+    await ensureProjectDir(projectPath);
+    let config = await loadConfig(projectPath);
+    config.projectPath = projectPath;
+
+    if (options.offline) {
+      config = { ...config, offline: { ...config.offline, enabled: true } };
+      const offlineMod = await import("../config/offline.js");
+      offlineMod.applyOfflineEnvironment();
+      config = offlineMod.applyOfflineMode(config);
+    }
+
+    const onboardingResult = {
+      experienceLevel: "expert" as const,
+      projectDescription: "Daemon mode — background tasks and heartbeat",
+      projectType: "daemon",
+      features: [],
+      stackPreferences: {},
+    };
+
+    const handle = await startDaemon({
+      projectPath,
+      config,
+      onboardingResult,
+      port: Number.parseInt(options.port, 10) || 3920,
+      host: options.host,
+      enableWhatsApp: options.whatsapp,
+      enableTelegram: options.telegram,
+      enableSlack: options.slack,
+    });
+
+    void handle;
+    const shutdown = async () => {
+      console.log(chalk.gray("\nShutting down daemon..."));
+      await handle.stop();
+      process.exit(0);
+    };
+
+    process.on("SIGINT", () => void shutdown());
+    process.on("SIGTERM", () => void shutdown());
+  });
+
+daemonCmd
+  .command("stop")
+  .description("Stop a running daemon via PID file")
+  .option("-p, --path <path>", "Project directory", process.cwd())
+  .action(async (options: { path: string }) => {
+    const {
+      readDaemonPid,
+      clearDaemonPid,
+      isProcessRunning,
+    } = await import("../daemon/task-runner.js");
+
+    const projectPath = path.resolve(options.path);
+    const pid = await readDaemonPid(projectPath);
+
+    if (!pid || !isProcessRunning(pid)) {
+      console.log(chalk.yellow("Daemon is not running."));
+      await clearDaemonPid(projectPath);
+      return;
+    }
+
+    try {
+      process.kill(pid, "SIGTERM");
+      console.log(chalk.green(`Sent SIGTERM to daemon (pid ${pid})`));
+    } catch (error) {
+      console.error(chalk.red("Failed to stop daemon:"), error);
+      process.exit(1);
+    }
+
+    await clearDaemonPid(projectPath);
+  });
+
+daemonCmd
+  .command("status")
+  .description("Check if the daemon is running")
+  .option("-p, --path <path>", "Project directory", process.cwd())
+  .action(async (options: { path: string }) => {
+    const { readDaemonPid, isProcessRunning } = await import("../daemon/task-runner.js");
+    const projectPath = path.resolve(options.path);
+    const pid = await readDaemonPid(projectPath);
+
+    if (pid && isProcessRunning(pid)) {
+      console.log(chalk.green(`Daemon running (pid ${pid})`));
+    } else {
+      console.log(chalk.yellow("Daemon is not running."));
+    }
+  });
+
+daemonCmd
+  .command("install")
+  .description("Generate OS service install instructions")
+  .option("-p, --path <path>", "Project directory", process.cwd())
+  .action(async (options: { path: string }) => {
+    const { generateServiceInstall } = await import("../daemon/service-install.js");
+    const projectPath = path.resolve(options.path);
+    await ensureProjectDir(projectPath);
+    const result = await generateServiceInstall(projectPath);
+    console.log(chalk.cyan(result.instructions));
+    if (result.artifactPath) {
+      console.log(chalk.gray(`\nArtifact: ${result.artifactPath}`));
+    }
+  });
+
+const taskCmd = program
+  .command("task")
+  .description("Durable cross-session task queue");
+
+taskCmd
+  .command("add")
+  .description("Enqueue a background task")
+  .argument("<prompt...>", "Task description")
+  .option("-p, --path <path>", "Project directory", process.cwd())
+  .option("--priority <n>", "Priority 1-10 (default 5)", "5")
+  .option("--cron <expr>", "Cron schedule (5-field, e.g. '0 3 * * 1')")
+  .option("--every <interval>", "Repeat interval (e.g. 30m, 2h, 1d)")
+  .option("--kind <kind>", "Task kind: agent|consolidation|heartbeat", "agent")
+  .action(async (
+    promptParts: string[],
+    options: { path: string; priority: string; cron?: string; every?: string; kind: string },
+  ) => {
+    const { addTask } = await import("../tasks/queue.js");
+    const prompt = promptParts.join(" ").trim();
+    if (!prompt) {
+      console.error(chalk.red("Prompt is required."));
+      process.exit(1);
+    }
+
+    const kind = options.kind as "agent" | "consolidation" | "heartbeat";
+    const task = await addTask(path.resolve(options.path), {
+      prompt,
+      kind,
+      priority: Number.parseInt(options.priority, 10) || 5,
+      ...(options.cron ? { cron: options.cron } : {}),
+      ...(options.every ? { every: options.every } : {}),
+      source: "cli",
+    });
+
+    console.log(chalk.green(`Queued task ${task.id} [${task.status}]`));
+  });
+
+taskCmd
+  .command("list")
+  .description("List tasks in the queue")
+  .option("-p, --path <path>", "Project directory", process.cwd())
+  .option("--status <status>", "Filter by status")
+  .action(async (options: { path: string; status?: string }) => {
+    const { listTasks, formatTaskList } = await import("../tasks/queue.js");
+    const tasks = await listTasks(path.resolve(options.path), {
+      ...(options.status ? { status: options.status as import("../tasks/queue.js").TaskStatus } : {}),
+    });
+    console.log(chalk.cyan(formatTaskList(tasks)));
+  });
+
+taskCmd
+  .command("cancel")
+  .description("Cancel a queued task")
+  .argument("<taskId>", "Task ID")
+  .option("-p, --path <path>", "Project directory", process.cwd())
+  .action(async (taskId: string, options: { path: string }) => {
+    const { cancelTask } = await import("../tasks/queue.js");
+    const ok = await cancelTask(path.resolve(options.path), taskId);
+    if (ok) {
+      console.log(chalk.green(`Cancelled ${taskId}`));
+    } else {
+      console.error(chalk.red(`Task ${taskId} not found.`));
+      process.exit(1);
+    }
+  });
+
 program
   .command("sbom")
   .description("Generate CycloneDX SBOM for the project")

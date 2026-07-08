@@ -27,6 +27,8 @@ import { createSessionStateTools } from "../memory/session-state.js";
 import { contextGuardMiddleware, setAuditProjectPath } from "./context-guard.js";
 import { hookMiddleware } from "./hook-middleware.js";
 import { policyMiddleware, setPolicyContext } from "../policy/middleware.js";
+import { setCompressionConfig, compressionMiddleware } from "../context/compression-middleware.js";
+import { isCompressionEnabled } from "../context/compression.js";
 import { resolvePolicies } from "../policy/loader.js";
 import { isOfflineMode } from "../config/offline.js";
 import { setHookContext, emitHookAsync } from "../hooks/hook-engine.js";
@@ -41,6 +43,7 @@ import { createFileTrackerTools } from "../tools/file-tracker.js";
 
 import { createDependencyOrderTool } from "../tools/dependency-graph.js";
 import { createCodeSearchTools } from "../tools/code-search.js";
+import { createCodeGraphTools } from "../tools/codegraph-tools.js";
 import { createMemoryTools } from "../tools/memory-tools.js";
 import { createTaskGraphTools } from "../tools/task-graph-tools.js";
 import { createIntelligenceTools } from "../tools/intelligence-tools.js";
@@ -102,6 +105,9 @@ export async function createSajiCode(
     sessionId: threadId,
     policies: resolvedPolicies,
   });
+  setCompressionConfig(
+    isCompressionEnabled(config.compression) ? (config.compression ?? { enabled: true }) : null,
+  );
   await saveCurrentThread(config.projectPath, threadId);
   emitHookAsync("sessionStart", {
     sessionId: threadId,
@@ -224,6 +230,10 @@ export async function createSajiCode(
   
   const dependencyOrderTool = createDependencyOrderTool();
   const codeSearchTools = createCodeSearchTools(config.projectPath);
+  const codeGraphEnabled = config.codeGraph?.enabled !== false;
+  const codeGraphTools = codeGraphEnabled
+    ? createCodeGraphTools(config.projectPath)
+    : [];
   const taskGraphTools = createTaskGraphTools(config.projectPath);
   const intelligenceTools = createIntelligenceTools(config.projectPath);
   const teamContextTools = createTeamContextTools(config.projectPath);
@@ -268,6 +278,7 @@ export async function createSajiCode(
       
       dependencyOrderTool,
       ...codeSearchTools,
+      ...codeGraphTools,
       ...taskGraphTools,
       ...intelligenceTools,
       ...teamContextTools,
@@ -306,6 +317,7 @@ export async function createSajiCode(
       judgmentMiddleware,
       hookMiddleware,
       policyMiddleware,
+      ...(isCompressionEnabled(config.compression) ? [compressionMiddleware] : []),
       contextGuardMiddleware,
     ] as any,
     checkpointer,

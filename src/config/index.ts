@@ -85,6 +85,9 @@ function mergeConfigFromFile(
     ...(fileConfig.policies ? { policies: fileConfig.policies } : {}),
     ...(fileConfig.vault ? { vault: fileConfig.vault } : {}),
     ...(fileConfig.offline ? { offline: fileConfig.offline } : {}),
+    ...(fileConfig.codeGraph ? { codeGraph: fileConfig.codeGraph } : {}),
+    ...(fileConfig.compression ? { compression: fileConfig.compression } : {}),
+    ...(fileConfig.daemon ? { daemon: fileConfig.daemon } : {}),
     ...(fileConfig.pluginRegistryUrl
       ? { pluginRegistryUrl: fileConfig.pluginRegistryUrl }
       : {}),

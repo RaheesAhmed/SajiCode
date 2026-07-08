@@ -7,6 +7,13 @@ import {
   markMessagesRead,
   formatMessagesForAgent,
 } from "../agents/message-bus.js";
+import {
+  requestHandoff,
+  listHandoffs,
+  acceptHandoff,
+  completeHandoff,
+  formatHandoffs,
+} from "../agents/handoff.js";
 import { appendAuditEntry } from "../audit/audit-log.js";
 
 export function createMessagingTools(projectPath: string, defaultAgentName: string) {
@@ -94,5 +101,92 @@ export function createMessagingTools(projectPath: string, defaultAgentName: stri
     },
   );
 
-  return [sendMessageTool, checkMessagesTool, markReadTool, broadcastTool];
+  const handoffTool = tool(
+    async (input: {
+      from: string;
+      to: string;
+      reason: string;
+      context: string;
+      blocking?: boolean;
+    }) => {
+      const record = await requestHandoff(projectPath, input);
+      return `Handoff ${record.id} queued for ${input.to} (task ${record.taskId ?? "none"}): ${input.reason}`;
+    },
+    {
+      name: "handoff_to_agent",
+      description:
+        "LangGraph-style swarm handoff — transfer work to another lead with full context. " +
+        "Queues a background task and sends a blocking inbox message.",
+      schema: z.object({
+        from: z.string().describe("Your agent name"),
+        to: z.string().describe("Target lead (e.g. backend-lead, qa-lead)"),
+        reason: z.string().describe("Why you are handing off"),
+        context: z.string().describe("Everything the next agent needs to continue"),
+        blocking: z.boolean().optional().describe("Default true — recipient should pick up soon"),
+      }),
+    },
+  );
+
+  const listHandoffsTool = tool(
+    async (input: { agentName?: string; pendingOnly?: boolean }) => {
+      const agentName = input.agentName ?? defaultAgentName;
+      const records = await listHandoffs(
+        projectPath,
+        agentName,
+        input.pendingOnly ? "pending" : undefined,
+      );
+      return formatHandoffs(records);
+    },
+    {
+      name: "list_handoffs",
+      description: "List pending or historical agent handoffs for swarm coordination.",
+      schema: z.object({
+        agentName: z.string().optional(),
+        pendingOnly: z.boolean().optional().describe("Only show pending handoffs"),
+      }),
+    },
+  );
+
+  const acceptHandoffTool = tool(
+    async (input: { handoffId: string; agentName?: string }) => {
+      const agentName = input.agentName ?? defaultAgentName;
+      const record = await acceptHandoff(projectPath, input.handoffId, agentName);
+      if (!record) return `Handoff ${input.handoffId} not found or not assigned to ${agentName}.`;
+      return `Accepted handoff ${record.id} from ${record.from}:\n${record.context}`;
+    },
+    {
+      name: "accept_handoff",
+      description: "Accept a pending handoff and load its context.",
+      schema: z.object({
+        handoffId: z.string(),
+        agentName: z.string().optional(),
+      }),
+    },
+  );
+
+  const completeHandoffTool = tool(
+    async (input: { handoffId: string }) => {
+      const record = await completeHandoff(projectPath, input.handoffId);
+      if (!record) return `Handoff ${input.handoffId} not found.`;
+      return `Completed handoff ${record.id} (${record.from} → ${record.to}).`;
+    },
+    {
+      name: "complete_handoff",
+      description: "Mark a handoff complete after finishing the transferred work.",
+      schema: z.object({
+        handoffId: z.string(),
+      }),
+    },
+  );
+
+  return [
+    sendMessageTool,
+    checkMessagesTool,
+    markReadTool,
+    broadcastTool,
+    handoffTool,
+    listHandoffsTool,
+    acceptHandoffTool,
+    completeHandoffTool,
+  ];
 }

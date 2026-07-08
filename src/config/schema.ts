@@ -102,6 +102,23 @@ const offlineConfigSchema = z.object({
   baseUrl: z.string().optional(),
 });
 
+const codeGraphConfigSchema = z.object({
+  enabled: z.boolean().optional(),
+});
+
+const compressionConfigSchema = z.object({
+  enabled: z.boolean().optional(),
+  minChars: z.number().int().positive().optional(),
+  maxChars: z.number().int().positive().optional(),
+  tools: z.array(z.string()).optional(),
+});
+
+const daemonConfigSchema = z.object({
+  heartbeatIntervalMs: z.number().int().positive().optional(),
+  taskPollIntervalMs: z.number().int().positive().optional(),
+  port: z.number().int().positive().optional(),
+});
+
 const hooksSchema = z.object({
   sessionStart: hookEventSchema.optional(),
   sessionEnd: hookEventSchema.optional(),
@@ -130,6 +147,9 @@ const KNOWN_CONFIG_KEYS = new Set([
   "policies",
   "vault",
   "offline",
+  "codeGraph",
+  "compression",
+  "daemon",
   "pluginRegistryUrl",
   "riskTolerance",
   "humanInTheLoop",
@@ -148,6 +168,9 @@ export const configFileSchema = z.object({
   policies: policyConfigSchema.optional(),
   vault: vaultConfigSchema.optional(),
   offline: offlineConfigSchema.optional(),
+  codeGraph: codeGraphConfigSchema.optional(),
+  compression: compressionConfigSchema.optional(),
+  daemon: daemonConfigSchema.optional(),
   pluginRegistryUrl: z.string().url().optional(),
   riskTolerance: riskToleranceSchema.optional(),
   humanInTheLoop: humanInTheLoopSchema.optional(),

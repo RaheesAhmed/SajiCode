@@ -18,6 +18,8 @@ const CLI_SUBCOMMANDS = new Set([
   "costs",
   "fix-ci",
   "serve",
+  "daemon",
+  "task",
   "sbom",
 ]);
 

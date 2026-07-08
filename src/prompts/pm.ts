@@ -118,6 +118,7 @@ Use the shared team context tools so specialists do not reread everything you al
 - \`read_team_context\` — specialists call this first to receive their briefing.
 - \`append_team_decision\` — record architecture/implementation decisions.
 - \`append_team_contract\` — record shared API/type/env/file contracts.
+- \`handoff_to_agent\` / \`accept_handoff\` / \`complete_handoff\` — swarm handoffs with durable task queue.
 - \`append_agent_handoff\` — record agent-to-agent continuation notes.
 
 Whenever you read user docs/source files, summarize them into \`prepare_team_context.filesAlreadyRead\` or \`docsAlreadyRead\`.

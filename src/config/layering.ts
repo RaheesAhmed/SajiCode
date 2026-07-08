@@ -72,6 +72,15 @@ function deepMergeConfig(
     offline: overlay.offline
       ? { ...(base.offline ?? {}), ...overlay.offline }
       : base.offline,
+    codeGraph: overlay.codeGraph
+      ? { ...(base.codeGraph ?? {}), ...overlay.codeGraph }
+      : base.codeGraph,
+    compression: overlay.compression
+      ? { ...(base.compression ?? {}), ...overlay.compression }
+      : base.compression,
+    daemon: overlay.daemon
+      ? { ...(base.daemon ?? {}), ...overlay.daemon }
+      : base.daemon,
     pluginRegistryUrl: overlay.pluginRegistryUrl ?? base.pluginRegistryUrl,
   };
 }

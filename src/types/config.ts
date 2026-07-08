@@ -62,6 +62,24 @@ export interface OfflineConfig {
   baseUrl?: string;
 }
 
+export interface CodeGraphConfig {
+  /** Default true — persistent graph at .sajicode/codegraph.json */
+  enabled?: boolean;
+}
+
+export interface CompressionConfig {
+  enabled?: boolean;
+  minChars?: number;
+  maxChars?: number;
+  tools?: string[];
+}
+
+export interface DaemonConfig {
+  heartbeatIntervalMs?: number;
+  taskPollIntervalMs?: number;
+  port?: number;
+}
+
 export interface ProjectConfig {
   projectPath: string;
   modelConfig: ModelConfig;
@@ -72,6 +90,9 @@ export interface ProjectConfig {
   policies?: PolicyConfig;
   vault?: VaultConfig;
   offline?: OfflineConfig;
+  codeGraph?: CodeGraphConfig;
+  compression?: CompressionConfig;
+  daemon?: DaemonConfig;
   /** Remote plugin registry JSON URL (optional) */
   pluginRegistryUrl?: string;
   riskTolerance: RiskTolerance;

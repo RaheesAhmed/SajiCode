@@ -10,6 +10,7 @@ import {
   redactInlineSecrets,
   redactSecretFileContent,
 } from "../secrets/redact.js";
+import { refreshCodeGraphFile } from "../context/codegraph.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -252,6 +253,10 @@ function invalidateWrittenPath(rawPath: string): void {
   const resolved = path.resolve(rawPath);
   writtenPaths.add(resolved);
   fileReadCache.delete(resolved);
+
+  if (auditProjectPath) {
+    void refreshCodeGraphFile(auditProjectPath, resolved).catch(() => undefined);
+  }
 }
 
 export function resetContextGuardCache(): void {
