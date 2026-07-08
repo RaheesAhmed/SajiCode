@@ -5,7 +5,7 @@ import path from "node:path";
 import { Command } from "commander";
 import chalk from "chalk";
 import { loadConfig, saveConfig, ensureProjectDir, resolveConfigForDoctor } from "../config/index.js";
-import { createSajiCode, runOnboarding } from "../agents/index.js";
+import { createSajiCode, runOnboarding, finalizeSession } from "../agents/index.js";
 import {
   generateThreadId,
   saveCurrentThread,
@@ -42,6 +42,7 @@ import {
   formatPluginList,
   formatPluginConsent,
 } from "../plugins/registry.js";
+import { formatCostsReport } from "../observability/usage-tracker.js";
 
 const ORANGE = chalk.hex("#FF8C00");
 const program = new Command();
@@ -123,6 +124,9 @@ program
 
       await renderer.processMultiStream(stream as any);
       if (!options.headless) renderer.printComplete();
+
+      await finalizeSession(projectPath, threadId);
+      await mcpClient.close();
     } catch (error) {
       const renderer = new StreamRenderer(options.headless);
       renderer.printError(error instanceof Error ? error : new Error(String(error)));
@@ -588,6 +592,16 @@ skillCmd
   });
 
 program
+  .command("costs")
+  .description("Show estimated API usage costs")
+  .option("-p, --path <path>", "Project directory", process.cwd())
+  .option("-d, --days <days>", "Report window in days", "7")
+  .action(async (options: { path: string; days: string }) => {
+    const days = Number.parseInt(options.days, 10) || 7;
+    console.log(chalk.cyan(await formatCostsReport(options.path, days)));
+  });
+
+program
   .command("config-doctor")
   .description("Validate .sajicode/config.json and report issues")
   .option("-p, --path <path>", "Project directory", process.cwd())
@@ -620,6 +634,12 @@ program
       console.log(chalk.gray(`    Provider: ${config.modelConfig.provider}`));
       console.log(chalk.gray(`    Risk:     ${config.riskTolerance}`));
       console.log(chalk.gray(`    HITL:     ${config.humanInTheLoop?.enabled ? "enabled" : "disabled"}`));
+      if (config.modelRouting) {
+        console.log(chalk.gray(`    Routing:  planner=${config.modelRouting.planner ?? "(default)"}, leads=${config.modelRouting.leads ?? "(default)"}`));
+      }
+      if (config.budget?.perSession) {
+        console.log(chalk.gray(`    Budget:   $${config.budget.perSession}/session (${config.budget.action ?? "warn"})`));
+      }
     } catch (error) {
       console.error(chalk.red("❌ Config doctor failed:"), error);
       process.exit(1);

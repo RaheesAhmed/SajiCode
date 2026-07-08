@@ -52,6 +52,22 @@ const hookEventSchema = z.union([
   z.array(z.union([z.string(), hookDefinitionSchema])),
 ]);
 
+const modelRoutingSchema = z.object({
+  planner: z.string().optional(),
+  leads: z.string().optional(),
+  cheap: z.string().optional(),
+  fallback: z.string().optional(),
+  fallbackProvider: z.string().optional(),
+  perAgent: z.record(z.string()).optional(),
+  cheapAgents: z.array(z.string()).optional(),
+});
+
+const budgetSchema = z.object({
+  perSession: z.number().positive().optional(),
+  perTask: z.number().positive().optional(),
+  action: z.enum(["warn", "pause"]).optional(),
+});
+
 const hooksSchema = z.object({
   sessionStart: hookEventSchema.optional(),
   sessionEnd: hookEventSchema.optional(),
@@ -73,6 +89,8 @@ const hooksSchema = z.object({
 const KNOWN_CONFIG_KEYS = new Set([
   "model",
   "modelConfig",
+  "modelRouting",
+  "budget",
   "riskTolerance",
   "humanInTheLoop",
   "whatsapp",
@@ -83,6 +101,8 @@ const KNOWN_CONFIG_KEYS = new Set([
 export const configFileSchema = z.object({
   model: modelConfigSchema.optional(),
   modelConfig: modelConfigSchema.optional(),
+  modelRouting: modelRoutingSchema.optional(),
+  budget: budgetSchema.optional(),
   riskTolerance: riskToleranceSchema.optional(),
   humanInTheLoop: humanInTheLoopSchema.optional(),
   whatsapp: whatsAppSchema.optional(),

@@ -53,6 +53,12 @@ function deepMergeConfig(
       : base.humanInTheLoop,
     whatsapp: { ...(base.whatsapp ?? {}), ...(overlay.whatsapp ?? {}) },
     hooks: { ...(base.hooks ?? {}), ...(overlay.hooks ?? {}) },
+    modelRouting: overlay.modelRouting
+      ? { ...(base.modelRouting ?? {}), ...overlay.modelRouting }
+      : base.modelRouting,
+    budget: overlay.budget
+      ? { ...(base.budget ?? {}), ...overlay.budget }
+      : base.budget,
   };
 }
 

@@ -8,9 +8,27 @@ export interface ModelConfig {
   apiKey?: string;
 }
 
+export interface ModelRoutingConfig {
+  planner?: string;
+  leads?: string;
+  cheap?: string;
+  fallback?: string;
+  fallbackProvider?: string;
+  perAgent?: Record<string, string>;
+  cheapAgents?: string[];
+}
+
+export interface BudgetConfig {
+  perSession?: number;
+  perTask?: number;
+  action?: "warn" | "pause";
+}
+
 export interface ProjectConfig {
   projectPath: string;
   modelConfig: ModelConfig;
+  modelRouting?: ModelRoutingConfig;
+  budget?: BudgetConfig;
   riskTolerance: RiskTolerance;
   humanInTheLoop?: HumanInTheLoopConfig;
   whatsapp?: WhatsAppConfig;

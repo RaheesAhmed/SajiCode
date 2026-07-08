@@ -4,7 +4,7 @@ import chalk from "chalk";
 import readline from "readline";
 import { Command } from "@langchain/langgraph";
 import { loadConfig, ensureProjectDir } from "./config/index.js";
-import { createSajiCode, createInitAgent } from "./agents/index.js";
+import { createSajiCode, createInitAgent, finalizeSession } from "./agents/index.js";
 import {
   generateThreadId,
   saveCurrentThread,
@@ -297,6 +297,7 @@ async function main(): Promise<void> {
     const cleanupAndExit = async (code: number) => {
       runHook("onExit", config.hooks, projectPath);
       emitHookAsync("sessionEnd", { projectPath, sessionId: threadId });
+      await finalizeSession(projectPath, threadId);
       await mcpClient.close();
       process.exit(code);
     };
@@ -543,6 +544,7 @@ const CLI_SUBCOMMANDS = new Set([
   "skill",
   "mcp",
   "plugin",
+  "costs",
 ]);
 
 /** Strip Node/npm `--` separator so `node dist/index.js -- mcp list` works. */

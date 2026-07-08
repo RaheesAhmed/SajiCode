@@ -3,9 +3,17 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
-import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import type { CompiledSubAgent } from "deepagents";
 import { createAgentFromSpec, AGENT_PRESETS, type AgentSpec, type AgentFactoryOptions } from "./agent-factory.js";
+import { createModelForAgent } from "../llms/model-factory.js";
+import type { ModelConfig, ModelRoutingConfig, BudgetConfig } from "../types/index.js";
+
+export interface AgentRegistryOptions extends AgentFactoryOptions {
+  baseModelConfig: ModelConfig;
+  modelRouting?: ModelRoutingConfig;
+  sessionId: string;
+  budget?: BudgetConfig;
+}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -116,26 +124,56 @@ function jsonToAgentSpec(json: AgentSpecJson): AgentSpec {
  * Falls back to AGENT_PRESETS if no JSON specs are found.
  */
 export async function createAllRegisteredAgents(
-  model: BaseChatModel,
   projectPath: string,
-  factoryOptions: AgentFactoryOptions = {},
+  options: AgentRegistryOptions,
   extraSpecDirs: string[] = [],
 ): Promise<CompiledSubAgent[]> {
   const jsonSpecs = await loadAllSpecs(extraSpecDirs);
+  const factoryOptions: AgentFactoryOptions = {
+    mcpClient: options.mcpClient,
+    mcpTools: options.mcpTools,
+    checkpointer: options.checkpointer,
+    pluginSkillRoots: options.pluginSkillRoots,
+    baseModelConfig: options.baseModelConfig,
+  };
 
   if (jsonSpecs.length > 0) {
     return Promise.all(
-      jsonSpecs.map(async (json) =>
-        createAgentFromSpec(jsonToAgentSpec(json), model, projectPath, factoryOptions),
-      ),
+      jsonSpecs.map(async (json) => {
+        const model = await createModelForAgent(
+          json.name,
+          options.baseModelConfig,
+          options.modelRouting,
+          {
+            projectPath,
+            sessionId: options.sessionId,
+            ...(options.budget ? { budget: options.budget } : {}),
+          },
+        );
+        return createAgentFromSpec(
+          jsonToAgentSpec(json),
+          model,
+          projectPath,
+          factoryOptions,
+        );
+      }),
     );
   }
 
-  // Fallback to hardcoded presets
   return Promise.all(
-    Object.values(AGENT_PRESETS).map(async (spec) =>
-      createAgentFromSpec(spec, model, projectPath, factoryOptions),
-    ),
+    Object.values(AGENT_PRESETS).map(async (spec) => {
+      const model = await createModelForAgent(
+        spec.name,
+        options.baseModelConfig,
+        options.modelRouting,
+        {
+          projectPath,
+          sessionId: options.sessionId,
+          ...(options.budget ? { budget: options.budget } : {}),
+        },
+      );
+      return createAgentFromSpec(spec, model, projectPath, factoryOptions);
+    }),
   );
 }
 
@@ -201,6 +239,7 @@ export function createAgentRegistryTools(specs: AgentSpecJson[]) {
         "  • MCP server → mcp-specialist",
         "  • Docker / CI/CD → deploy-lead",
         "  • Security audit → security-lead",
+        "  • Research / comparisons / ADRs → research-lead",
         "  • Test coverage → qa-lead",
         "  • Final quality gate → review-agent (run LAST)",
         "",

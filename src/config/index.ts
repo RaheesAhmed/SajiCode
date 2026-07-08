@@ -77,6 +77,8 @@ function mergeConfigFromFile(
       ...defaults.modelConfig,
       ...modelFromFile,
     },
+    ...(fileConfig.modelRouting ? { modelRouting: fileConfig.modelRouting } : {}),
+    ...(fileConfig.budget ? { budget: fileConfig.budget } : {}),
     riskTolerance: fileConfig.riskTolerance ?? defaults.riskTolerance,
     humanInTheLoop: {
       ...defaults.humanInTheLoop!,

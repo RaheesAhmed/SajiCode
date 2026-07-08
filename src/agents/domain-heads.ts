@@ -1,13 +1,10 @@
 import type { CompiledSubAgent } from "deepagents";
-import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
-import { createAllRegisteredAgents } from "./agent-registry.js";
-import type { AgentFactoryOptions } from "./agent-factory.js";
+import { createAllRegisteredAgents, type AgentRegistryOptions } from "./agent-registry.js";
 
 export async function createAllDomainHeads(
-  model: BaseChatModel,
   projectPath: string,
-  factoryOptions: AgentFactoryOptions = {},
+  registryOptions: AgentRegistryOptions,
   extraSpecDirs: string[] = [],
 ): Promise<CompiledSubAgent[]> {
-  return createAllRegisteredAgents(model, projectPath, factoryOptions, extraSpecDirs);
+  return createAllRegisteredAgents(projectPath, registryOptions, extraSpecDirs);
 }

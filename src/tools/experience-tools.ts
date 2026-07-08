@@ -4,9 +4,15 @@ import {
   recordExperience,
   queryExperiences,
   formatExperiencesForPrompt,
+  loadExperienceJournal,
 } from "../memory/experience-replay.js";
+import { indexSingleExperience } from "./semantic-memory-tools.js";
+import type { ModelConfig } from "../types/index.js";
 
-export function createExperienceTools(projectPath: string) {
+export function createExperienceTools(
+  projectPath: string,
+  modelConfig?: ModelConfig,
+) {
   const recordTool = tool(
     async (input: {
       taskType: string;
@@ -31,6 +37,17 @@ export function createExperienceTools(projectPath: string) {
       if (input.errorPattern) record.errorPattern = input.errorPattern;
       if (input.resolution) record.resolution = input.resolution;
       const id = await recordExperience(projectPath, record);
+
+      try {
+        const journal = await loadExperienceJournal(projectPath);
+        const saved = journal.experiences.find((e) => e.id === id);
+        if (saved) {
+          await indexSingleExperience(projectPath, saved, modelConfig);
+        }
+      } catch {
+        // Non-fatal — keyword search still works
+      }
+
       return `Experience recorded: ${id} (${input.outcome})`;
     },
     {

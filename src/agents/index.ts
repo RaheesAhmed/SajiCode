@@ -10,7 +10,7 @@ import { createWebSearchTool } from "../tools/web-search.js";
 import { createRepoMapTool } from "../tools/repo-map.js";
 import { createAllDomainHeads } from "./domain-heads.js";
 import { loadAllSpecs, createAgentRegistryTools } from "./agent-registry.js";
-import { createModel } from "../llms/provider.js";
+import { createModelForAgent } from "../llms/model-factory.js";
 import { getAllSkillPaths } from "../utils/skills.js";
 import { loadPluginContributions } from "../plugins/registry.js";
 import { MCPClientManager } from "../mcp/MCPClient.js";
@@ -43,6 +43,11 @@ import { createContractTools } from "../tools/contract-tools.js";
 import { createPatternTools } from "../memory/pattern-library.js";
 import { createValidationTools } from "../tools/validation-tools.js";
 import { createStandupTools } from "../tools/standup.js";
+import { createMessagingTools } from "../tools/messaging-tools.js";
+import { createSemanticMemoryTools } from "../tools/semantic-memory-tools.js";
+import { createAdrTools } from "../tools/adr-tools.js";
+import { createPromoteSkillTool } from "../skills/promote.js";
+import { finalizeSession } from "../observability/session-end.js";
 import { getCheckpointer, saveCurrentThread } from "../memory/index.js";
 
 function buildInterruptOn(
@@ -81,7 +86,16 @@ export async function createSajiCode(
     projectPath: config.projectPath,
   });
 
-  const model = await createModel(config.modelConfig);
+  const model = await createModelForAgent(
+    "pm-agent",
+    config.modelConfig,
+    config.modelRouting,
+    {
+      projectPath: config.projectPath,
+      sessionId: threadId,
+      ...(config.budget ? { budget: config.budget } : {}),
+    },
+  );
 
   // Initialize three-layer memory structure
   await initThreeLayerMemory(config.projectPath);
@@ -118,12 +132,18 @@ export async function createSajiCode(
     mcpClient,
     checkpointer,
     pluginSkillRoots: pluginContributions.skillRoots,
+    baseModelConfig: config.modelConfig,
   };
 
   const domainHeads = await createAllDomainHeads(
-    model,
     config.projectPath,
-    factoryOptions,
+    {
+      ...factoryOptions,
+      baseModelConfig: config.modelConfig,
+      modelRouting: config.modelRouting,
+      sessionId: threadId,
+      ...(config.budget ? { budget: config.budget } : {}),
+    },
     pluginContributions.agentSpecPaths,
   );
   const agentSpecs = await loadAllSpecs(pluginContributions.agentSpecPaths);
@@ -131,7 +151,7 @@ export async function createSajiCode(
   const interruptOn = buildInterruptOn(config.humanInTheLoop);
 
   const contextBriefingTool = createContextBriefingTool(config.projectPath);
-  const experienceTools = createExperienceTools(config.projectPath);
+  const experienceTools = createExperienceTools(config.projectPath, config.modelConfig);
   const sessionStateTools = createSessionStateTools(config.projectPath);
   
   const dependencyOrderTool = createDependencyOrderTool();
@@ -191,6 +211,10 @@ export async function createSajiCode(
       ...createPatternTools(config.projectPath),
       ...createValidationTools(config.projectPath),
       ...createStandupTools(config.projectPath),
+      ...createMessagingTools(config.projectPath, "pm-agent"),
+      ...createSemanticMemoryTools(config.projectPath, config.modelConfig),
+      ...createAdrTools(config.projectPath),
+      createPromoteSkillTool(config.projectPath),
       // Dynamic agent registry: list_available_agents + pick_best_agent
       ...registryTools,
     ] as any,
@@ -224,11 +248,22 @@ export async function createSajiCode(
   return { agent, sessionConfig, mcpClient };
 }
 
+export { finalizeSession };
+
 export async function createInitAgent(
   config: ProjectConfig,
   threadId: string
 ): Promise<{ agent: any; sessionConfig: Record<string, any> }> {
-  const model = await createModel(config.modelConfig);
+  const model = await createModelForAgent(
+    "init-agent",
+    config.modelConfig,
+    config.modelRouting,
+    {
+      projectPath: config.projectPath,
+      sessionId: threadId,
+      ...(config.budget ? { budget: config.budget } : {}),
+    },
+  );
 
   const backend = new SafeShellBackend({
     rootDir: config.projectPath,

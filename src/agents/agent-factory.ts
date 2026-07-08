@@ -43,8 +43,12 @@ import { createRepoLoaderTools } from "../tools/repo-loader.js";
 import { createProjectDnaTools } from "../memory/project-dna.js";
 import { createPatternTools } from "../memory/pattern-library.js";
 import { createStandupTools } from "../tools/standup.js";
+import { createMessagingTools } from "../tools/messaging-tools.js";
+import { createSemanticMemoryTools } from "../tools/semantic-memory-tools.js";
+import { createPromoteSkillTool } from "../skills/promote.js";
 import type { ProjectCheckpointer } from "../memory/checkpointer.js";
 import type { MCPClientManager } from "../mcp/MCPClient.js";
+import type { ModelConfig } from "../types/index.js";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -136,6 +140,7 @@ export interface AgentFactoryOptions {
   mcpTools?: any[];
   checkpointer?: ProjectCheckpointer;
   pluginSkillRoots?: string[];
+  baseModelConfig?: ModelConfig;
 }
 
 export async function createAgentFromSpec(
@@ -181,7 +186,7 @@ export async function createAgentFromSpec(
     createRepoMapTool(projectPath),
     createWebSearchTool(),
     createContextBriefingTool(projectPath),
-    ...createExperienceTools(projectPath),
+    ...createExperienceTools(projectPath, options.baseModelConfig),
     ...createSessionStateTools(projectPath),
     ...mcpTools,
     ...createGitTools(projectPath),
@@ -198,6 +203,9 @@ export async function createAgentFromSpec(
     ...createProjectDnaTools(projectPath),
     ...createPatternTools(projectPath),
     ...createStandupTools(projectPath),
+    ...createMessagingTools(projectPath, spec.name),
+    ...createSemanticMemoryTools(projectPath, options.baseModelConfig),
+    createPromoteSkillTool(projectPath),
     createRepoLoaderTools(projectPath),
   ];
 
