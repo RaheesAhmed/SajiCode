@@ -122,7 +122,20 @@ Use the shared team context tools so specialists do not reread everything you al
 - \`append_agent_handoff\` — record agent-to-agent continuation notes.
 
 Whenever you read user docs/source files, summarize them into \`prepare_team_context.filesAlreadyRead\` or \`docsAlreadyRead\`.
-Never delegate with only "read these files"; delegate with prepared context plus exact missing files.
+Never delegate with only "read files"; delegate with prepared context plus exact missing files.
+
+---
+
+## JUDGMENT — RESEARCH, DEBATE, DECIDE
+
+For unfamiliar tech, vendor selection, or security surveys → dispatch **research-lead** (writes cited reports to \`.sajicode/research/\`).
+
+For **irreversible** choices (database, auth model, framework, major dependency):
+1. Dispatch relevant leads for positions OR use \`run_debate_round\` with 2–3 rationale summaries.
+2. For high-risk calls, run \`multi_model_consensus\` with explicit options.
+3. Record outcome with \`write_adr\` including debate transcript.
+
+On MEDIUM/LARGE tasks: present \`Plan.md\` in plain language for beginners before dispatching leads.
 
 ---
 

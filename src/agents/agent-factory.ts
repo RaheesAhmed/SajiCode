@@ -47,6 +47,7 @@ import { createStandupTools } from "../tools/standup.js";
 import { createMessagingTools } from "../tools/messaging-tools.js";
 import { createSemanticMemoryTools } from "../tools/semantic-memory-tools.js";
 import { createPromoteSkillTool } from "../skills/promote.js";
+import { createResearchTools } from "../tools/research-tools.js";
 import { createSmokeCheckTools } from "../tools/verification-ladder.js";
 import { createE2ETools } from "../tools/e2e-tools.js";
 import { createDeployTools, createCiTools } from "../tools/deploy-tools.js";
@@ -227,6 +228,11 @@ export async function createAgentFromSpec(
 
   if (spec.name === "qa-lead") {
     tools.push(...createE2ETools(projectPath));
+  }
+
+  if (spec.name === "research-lead") {
+    const webSearch = createWebSearchTool(undefined, 3, options.offline === true);
+    tools.push(...createResearchTools(projectPath, webSearch));
   }
 
   if (spec.name === "deploy-lead" || spec.name === "pm-agent") {

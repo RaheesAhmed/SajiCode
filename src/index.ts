@@ -20,6 +20,7 @@ const CLI_SUBCOMMANDS = new Set([
   "serve",
   "daemon",
   "task",
+  "persona",
   "sbom",
 ]);
 

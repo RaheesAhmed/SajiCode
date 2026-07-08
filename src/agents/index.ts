@@ -59,6 +59,12 @@ import { createStandupTools } from "../tools/standup.js";
 import { createMessagingTools } from "../tools/messaging-tools.js";
 import { createSemanticMemoryTools } from "../tools/semantic-memory-tools.js";
 import { createAdrTools } from "../tools/adr-tools.js";
+import { createDebateTools } from "../tools/debate-tools.js";
+import {
+  resolveActivePersona,
+  formatPersonaForPrompt,
+  formatNonDeveloperGuidance,
+} from "../persona/index.js";
 import { createPromoteSkillTool } from "../skills/promote.js";
 import { createSmokeCheckTools } from "../tools/verification-ladder.js";
 import { createDeployTools, createCiTools } from "../tools/deploy-tools.js";
@@ -134,12 +140,15 @@ export async function createSajiCode(
 
   const projectContext = await loadProjectContext(config.projectPath);
   const contextPrompt = buildContextPrompt(onboardingResult);
+  const persona = await resolveActivePersona(config.projectPath);
   const pmPrompt = createPmPrompt(config.projectPath, {
     asyncSubagents: isAsyncSubagentsEnabled(config.asyncSubagents),
   });
   const fullSystemPrompt = [
     pmPrompt,
-    memoryPrompt, // Add memory pointer index to system prompt
+    formatPersonaForPrompt(persona),
+    formatNonDeveloperGuidance(onboardingResult.experienceLevel),
+    memoryPrompt,
     projectContext,
     contextPrompt,
   ].filter(Boolean).join("\n\n");
@@ -297,6 +306,7 @@ export async function createSajiCode(
       ...createMessagingTools(config.projectPath, "pm-agent"),
       ...createSemanticMemoryTools(config.projectPath, config.modelConfig),
       ...createAdrTools(config.projectPath),
+      ...createDebateTools(config.modelConfig, config.modelRouting),
       createPromoteSkillTool(config.projectPath),
       ...createSmokeCheckTools(config.projectPath),
       ...createDeployTools(config.projectPath),

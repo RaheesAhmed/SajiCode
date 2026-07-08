@@ -1033,6 +1033,44 @@ taskCmd
     }
   });
 
+const personaCmd = program
+  .command("persona")
+  .description("Manage PM persona (SOUL.md-style identity layer)");
+
+personaCmd
+  .command("list")
+  .description("List bundled and custom personas")
+  .option("-p, --path <path>", "Project directory", process.cwd())
+  .action(async (options: { path: string }) => {
+    const { listPersonaPacks, resolveActivePersona } = await import("../persona/index.js");
+    const packs = await listPersonaPacks(options.path);
+    const active = await resolveActivePersona(options.path);
+    console.log(chalk.cyan("Personas:"));
+    for (const pack of packs) {
+      const isActive =
+        active != null
+        && (pack.id === active.id || (active.id === "custom" && pack.source === "project"));
+      const marker = isActive ? chalk.green(" (active)") : "";
+      console.log(`  • ${pack.id} [${pack.source}] — ${pack.description}${marker}`);
+    }
+  });
+
+personaCmd
+  .command("set")
+  .description("Activate a persona (writes .sajicode/persona.md)")
+  .argument("<id>", "Persona id (e.g. engineer, startup-cto, business-ops)")
+  .option("-p, --path <path>", "Project directory", process.cwd())
+  .action(async (id: string, options: { path: string }) => {
+    const { activatePersona } = await import("../persona/index.js");
+    try {
+      const dest = await activatePersona(options.path, id);
+      console.log(chalk.green(`Persona "${id}" activated → ${dest}`));
+    } catch (error) {
+      console.error(chalk.red(error instanceof Error ? error.message : String(error)));
+      process.exit(1);
+    }
+  });
+
 program
   .command("sbom")
   .description("Generate CycloneDX SBOM for the project")
