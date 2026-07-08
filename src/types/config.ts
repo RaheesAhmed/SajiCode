@@ -40,6 +40,14 @@ export interface AsyncSubagentsConfig {
   headers?: Record<string, string>;
 }
 
+export interface PolicyConfig {
+  protectedPaths?: string[];
+  requireApproval?: string[];
+  forbiddenDependencies?: string[];
+  maxFilesPerSession?: number;
+  secretsScan?: "off" | "warn" | "block";
+}
+
 export interface ProjectConfig {
   projectPath: string;
   modelConfig: ModelConfig;
@@ -47,6 +55,7 @@ export interface ProjectConfig {
   budget?: BudgetConfig;
   sandbox?: SandboxConfig;
   asyncSubagents?: AsyncSubagentsConfig;
+  policies?: PolicyConfig;
   riskTolerance: RiskTolerance;
   humanInTheLoop?: HumanInTheLoopConfig;
   whatsapp?: WhatsAppConfig;

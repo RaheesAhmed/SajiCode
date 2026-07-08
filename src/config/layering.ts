@@ -65,6 +65,9 @@ function deepMergeConfig(
     asyncSubagents: overlay.asyncSubagents
       ? { ...(base.asyncSubagents ?? {}), ...overlay.asyncSubagents }
       : base.asyncSubagents,
+    policies: overlay.policies
+      ? { ...(base.policies ?? {}), ...overlay.policies }
+      : base.policies,
   };
 }
 

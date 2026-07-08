@@ -81,6 +81,7 @@ function mergeConfigFromFile(
     ...(fileConfig.budget ? { budget: fileConfig.budget } : {}),
     ...(fileConfig.sandbox ? { sandbox: fileConfig.sandbox } : {}),
     ...(fileConfig.asyncSubagents ? { asyncSubagents: fileConfig.asyncSubagents } : {}),
+    ...(fileConfig.policies ? { policies: fileConfig.policies } : {}),
     riskTolerance: fileConfig.riskTolerance ?? defaults.riskTolerance,
     humanInTheLoop: {
       ...defaults.humanInTheLoop!,

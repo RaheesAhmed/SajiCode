@@ -711,6 +711,47 @@ program
   });
 
 program
+  .command("serve")
+  .description("Start long-running team server (HTTP dashboard + optional channels)")
+  .option("-p, --path <path>", "Project directory", process.cwd())
+  .option("--port <port>", "HTTP port", "3920")
+  .option("--host <host>", "Bind address", "127.0.0.1")
+  .option("--whatsapp", "Attach WhatsApp channel when enabled in config", false)
+  .action(async (options: { path: string; port: string; host: string; whatsapp: boolean }) => {
+    const { startServeServer } = await import("../server/index.js");
+    const projectPath = path.resolve(options.path);
+    await ensureProjectDir(projectPath);
+    const config = await loadConfig(projectPath);
+    config.projectPath = projectPath;
+
+    const onboardingResult = {
+      experienceLevel: "expert" as const,
+      projectDescription: "Server mode — remote task dispatch",
+      projectType: "server",
+      features: [],
+      stackPreferences: {},
+    };
+
+    const handle = await startServeServer({
+      projectPath,
+      config,
+      onboardingResult,
+      port: Number.parseInt(options.port, 10) || 3920,
+      host: options.host,
+      enableWhatsApp: options.whatsapp,
+    });
+
+    const shutdown = async () => {
+      console.log(chalk.gray("\nShutting down server..."));
+      await handle.stop();
+      process.exit(0);
+    };
+
+    process.on("SIGINT", () => void shutdown());
+    process.on("SIGTERM", () => void shutdown());
+  });
+
+program
   .command("costs")
   .description("Show estimated API usage costs")
   .option("-p, --path <path>", "Project directory", process.cwd())

@@ -4,6 +4,7 @@ export {
   type BudgetConfig,
   type SandboxConfig,
   type AsyncSubagentsConfig,
+  type PolicyConfig,
   type ProjectConfig,
   type ExperienceLevel,
   type OnboardingResult,

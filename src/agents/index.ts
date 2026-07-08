@@ -26,6 +26,8 @@ import { createExperienceTools } from "../tools/experience-tools.js";
 import { createSessionStateTools } from "../memory/session-state.js";
 import { contextGuardMiddleware, setAuditProjectPath } from "./context-guard.js";
 import { hookMiddleware } from "./hook-middleware.js";
+import { policyMiddleware, setPolicyContext } from "../policy/middleware.js";
+import { resolvePolicies } from "../policy/loader.js";
 import { setHookContext, emitHookAsync } from "../hooks/hook-engine.js";
 import {
   toolRetryMiddleware,
@@ -88,6 +90,16 @@ export async function createSajiCode(
     projectPath: config.projectPath,
     hooks: config.hooks,
     defaultAgentName: "pm-agent",
+  });
+
+  const resolvedPolicies = await resolvePolicies(
+    config.projectPath,
+    config.policies,
+  );
+  setPolicyContext({
+    projectPath: config.projectPath,
+    sessionId: threadId,
+    policies: resolvedPolicies,
   });
   await saveCurrentThread(config.projectPath, threadId);
   emitHookAsync("sessionStart", {
@@ -286,6 +298,7 @@ export async function createSajiCode(
       // Business logic guards (innermost — run closest to the actual tool calls)
       judgmentMiddleware,
       hookMiddleware,
+      policyMiddleware,
       contextGuardMiddleware,
     ] as any,
     checkpointer,

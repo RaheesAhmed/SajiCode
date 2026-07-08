@@ -25,6 +25,7 @@ import { createWebSearchTool } from "../tools/web-search.js";
 import { leadJudgmentMiddleware } from "./judgment.js";
 import { contextGuardMiddleware } from "./context-guard.js";
 import { hookMiddleware } from "./hook-middleware.js";
+import { policyMiddleware } from "../policy/middleware.js";
 import { createContextBriefingTool } from "../tools/context-briefing.js";
 import { createExperienceTools } from "../tools/experience-tools.js";
 import { createSessionStateTools } from "../memory/session-state.js";
@@ -248,6 +249,7 @@ export async function createAgentFromSpec(
       // Business logic: enforcement guards (innermost — run closest to tool calls)
       leadJudgmentMiddleware,
       hookMiddleware,
+      policyMiddleware,
       contextGuardMiddleware,
       ...(options.agentProtocolUrl
         ? [

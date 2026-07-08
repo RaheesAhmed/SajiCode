@@ -81,6 +81,14 @@ const asyncSubagentsSchema = z.object({
   headers: z.record(z.string()).optional(),
 });
 
+const policyConfigSchema = z.object({
+  protectedPaths: z.array(z.string()).optional(),
+  requireApproval: z.array(z.string()).optional(),
+  forbiddenDependencies: z.array(z.string()).optional(),
+  maxFilesPerSession: z.number().int().positive().optional(),
+  secretsScan: z.enum(["off", "warn", "block"]).optional(),
+});
+
 const hooksSchema = z.object({
   sessionStart: hookEventSchema.optional(),
   sessionEnd: hookEventSchema.optional(),
@@ -106,6 +114,7 @@ const KNOWN_CONFIG_KEYS = new Set([
   "budget",
   "sandbox",
   "asyncSubagents",
+  "policies",
   "riskTolerance",
   "humanInTheLoop",
   "whatsapp",
@@ -120,6 +129,7 @@ export const configFileSchema = z.object({
   budget: budgetSchema.optional(),
   sandbox: sandboxSchema.optional(),
   asyncSubagents: asyncSubagentsSchema.optional(),
+  policies: policyConfigSchema.optional(),
   riskTolerance: riskToleranceSchema.optional(),
   humanInTheLoop: humanInTheLoopSchema.optional(),
   whatsapp: whatsAppSchema.optional(),
