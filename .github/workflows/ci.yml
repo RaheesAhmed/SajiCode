@@ -42,6 +42,9 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Test
+        run: npm test
+
       - name: Check for leftover secrets patterns
         run: |
           # Fail if any hardcoded secret patterns are found in source

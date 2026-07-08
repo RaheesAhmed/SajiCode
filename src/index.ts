@@ -5,9 +5,13 @@ import readline from "readline";
 import { Command } from "@langchain/langgraph";
 import { loadConfig, ensureProjectDir } from "./config/index.js";
 import { createSajiCode, createInitAgent } from "./agents/index.js";
-import { generateThreadId } from "./memory/index.js";
+import {
+  generateThreadId,
+  saveCurrentThread,
+} from "./memory/index.js";
 import { StreamRenderer, type InterruptInfo } from "./cli/renderer.js";
 import { hasSajiCodeMd } from "./agents/context.js";
+import { setAuditProjectPath } from "./agents/context-guard.js";
 import { createCollectProjectContextTool } from "./tools/context-tools.js";
 import type { OnboardingResult, HumanInTheLoopConfig } from "./types/index.js";
 import { input as inquirerInput, select as inquirerSelect } from "@inquirer/prompts";
@@ -244,12 +248,14 @@ async function main(): Promise<void> {
   if (!cliArgs.headless) renderer.printHeader();
 
   await ensureProjectDir(projectPath);
+  setAuditProjectPath(projectPath);
   const config = await loadConfig(projectPath);
 
   if (cliArgs.provider) config.modelConfig.provider = cliArgs.provider;
   if (cliArgs.model)    config.modelConfig.modelName = cliArgs.model;
 
   const threadId = generateThreadId();
+  await saveCurrentThread(projectPath, threadId);
   const transcript = createSessionTranscriptRecorder(projectPath, threadId);
   const onboardingResult: OnboardingResult = {
     experienceLevel: "expert",
@@ -281,6 +287,11 @@ async function main(): Promise<void> {
     sessionConfig = result.sessionConfig;
     const mcpClient = result.mcpClient;
     mcpServerNames = mcpClient.getServerNames();
+
+    const mcpReport = mcpClient.formatStartupReport();
+    if (mcpClient.getServerCount() > 0 && !cliArgs.headless) {
+      console.log(chalk.gray(mcpReport));
+    }
 
     const cleanupAndExit = async (code: number) => {
       runHook("onExit", config.hooks, projectPath);
@@ -515,7 +526,26 @@ function parseArgs(args: string[]): CliArgs {
   return result;
 }
 
-main().catch((error) => {
-  console.error(chalk.red(`Fatal error: ${error.message}`));
-  process.exit(1);
-});
+const CLI_SUBCOMMANDS = new Set([
+  "build",
+  "init",
+  "status",
+  "config",
+  "audit",
+  "undo",
+  "snapshots",
+  "standup",
+  "revert",
+  "resume",
+  "config-doctor",
+]);
+
+const subcommand = process.argv[2];
+if (subcommand && CLI_SUBCOMMANDS.has(subcommand)) {
+  await import("./cli/index.js");
+} else {
+  main().catch((error) => {
+    console.error(chalk.red(`Fatal error: ${error.message}`));
+    process.exit(1);
+  });
+}

@@ -2,9 +2,16 @@
 
 import { Command } from "commander";
 import chalk from "chalk";
-import { loadConfig, saveConfig, ensureProjectDir } from "../config/index.js";
+import { loadConfig, saveConfig, ensureProjectDir, resolveConfigForDoctor } from "../config/index.js";
 import { createSajiCode, runOnboarding } from "../agents/index.js";
-import { generateThreadId } from "../memory/index.js";
+import {
+  generateThreadId,
+  saveCurrentThread,
+  loadCurrentThread,
+  threadHasCheckpoint,
+  listRecentThreadIds,
+} from "../memory/index.js";
+import { setAuditProjectPath } from "../agents/context-guard.js";
 import { augmentInputWithMemoryContext } from "../memory/turn-context.js";
 import { StreamRenderer } from "./renderer.js";
 import { undoFileChange, listRecentSnapshots } from "../tools/file-tracker.js";
@@ -32,6 +39,7 @@ program
 
     try {
       await ensureProjectDir(projectPath);
+      setAuditProjectPath(projectPath);
       const config = await loadConfig(projectPath);
 
       if (options.model !== "minimax-m2.5:cloud") {
@@ -55,11 +63,17 @@ program
       renderer.startSpinner("PM Agent is planning milestones...");
 
       const threadId = generateThreadId();
-      const { agent, sessionConfig } = await createSajiCode({
+      await saveCurrentThread(projectPath, threadId);
+      const { agent, sessionConfig, mcpClient } = await createSajiCode({
         config,
         onboardingResult,
         threadId,
       });
+
+      const mcpReport = mcpClient.formatStartupReport();
+      if (mcpClient.getServerCount() > 0) {
+        console.log(chalk.gray(mcpReport));
+      }
 
       renderer.stopSpinner("Agent team initialized");
 
@@ -269,6 +283,138 @@ program
       }
     } catch (error) {
       console.error(chalk.red("❌ Revert failed:"), error);
+      process.exit(1);
+    }
+  });
+
+program
+  .command("resume")
+  .description("Resume the last agent session from a LangGraph checkpoint")
+  .option("-t, --thread <id>", "Thread ID to resume (defaults to last saved thread)")
+  .option("-p, --path <path>", "Project directory", process.cwd())
+  .option("-H, --headless", "Run in headless mode (no UI)", false)
+  .option("--message <text>", "Optional message to send after resume")
+  .action(async (options: {
+    thread?: string;
+    path: string;
+    headless: boolean;
+    message?: string;
+  }) => {
+    const projectPath = options.path;
+
+    try {
+      await ensureProjectDir(projectPath);
+      setAuditProjectPath(projectPath);
+      const config = await loadConfig(projectPath);
+
+      let threadId = options.thread ?? (await loadCurrentThread(projectPath)) ?? undefined;
+
+      if (!threadId) {
+        const recent = await listRecentThreadIds(projectPath, 5);
+        if (recent.length === 0) {
+          console.error(chalk.red("❌ No checkpoint found. Run `sajicode build` first."));
+          process.exit(1);
+        }
+        threadId = recent[0]!;
+        console.log(chalk.yellow(`  Using most recent thread: ${threadId}`));
+      }
+
+      const hasCheckpoint = await threadHasCheckpoint(projectPath, threadId);
+      if (!hasCheckpoint) {
+        console.error(chalk.red(`❌ No checkpoint found for thread: ${threadId}`));
+        const recent = await listRecentThreadIds(projectPath, 5);
+        if (recent.length > 0) {
+          console.log(chalk.gray(`  Recent threads: ${recent.join(", ")}`));
+        }
+        process.exit(1);
+      }
+
+      await saveCurrentThread(projectPath, threadId);
+
+      const renderer = new StreamRenderer(options.headless);
+      if (!options.headless) renderer.printHeader();
+
+      const onboardingResult = {
+        experienceLevel: "expert" as const,
+        projectDescription: "Resume previous session",
+        projectType: "general",
+        features: [],
+        stackPreferences: {},
+      };
+
+      renderer.startSpinner("Restoring agent team from checkpoint...");
+
+      const { agent, sessionConfig, mcpClient } = await createSajiCode({
+        config,
+        onboardingResult,
+        threadId,
+      });
+
+      renderer.stopSpinner("Session restored");
+      console.log(chalk.gray(`\n  Thread: ${threadId}`));
+      console.log(chalk.gray(`  Model: ${config.modelConfig.modelName}`));
+      console.log(chalk.gray(`  Project: ${projectPath}\n`));
+
+      if (mcpClient.getServerCount() > 0) {
+        console.log(chalk.gray(mcpClient.formatStartupReport()));
+      }
+
+      const resumeMessage = options.message
+        ?? "Continue from where we left off. Review the current state and proceed with the next steps.";
+
+      const streamInput = await augmentInputWithMemoryContext(projectPath, {
+        messages: [{ role: "user", content: resumeMessage }],
+      });
+
+      const stream = await agent.stream(
+        streamInput,
+        {
+          ...sessionConfig,
+          streamMode: ["updates", "messages", "custom"],
+          subgraphs: true,
+        },
+      );
+
+      await renderer.processMultiStream(stream as any);
+      if (!options.headless) renderer.printComplete();
+
+      await mcpClient.close();
+    } catch (error) {
+      const renderer = new StreamRenderer(options.headless);
+      renderer.printError(error instanceof Error ? error : new Error(String(error)));
+      process.exit(1);
+    }
+  });
+
+program
+  .command("config-doctor")
+  .description("Validate .sajicode/config.json and report issues")
+  .option("-p, --path <path>", "Project directory", process.cwd())
+  .action(async (options: { path: string }) => {
+    const projectPath = options.path;
+
+    try {
+      const { config, warnings } = await resolveConfigForDoctor(projectPath);
+
+      console.log(ORANGE.bold("🩺 SajiCode Config Doctor"));
+      console.log(chalk.gray(`  Project: ${projectPath}\n`));
+
+      if (warnings.length === 0) {
+        console.log(chalk.green("✅ Config is valid — no warnings"));
+      } else {
+        console.log(chalk.yellow("⚠️  Warnings:"));
+        for (const warning of warnings) {
+          console.log(chalk.yellow(`  • ${warning}`));
+        }
+      }
+
+      console.log(chalk.gray("\n  Resolved config:"));
+      console.log(chalk.gray(`    Model:    ${config.modelConfig.modelName}`));
+      console.log(chalk.gray(`    Provider: ${config.modelConfig.provider}`));
+      console.log(chalk.gray(`    Risk:     ${config.riskTolerance}`));
+      console.log(chalk.gray(`    HITL:     ${config.humanInTheLoop?.enabled ? "enabled" : "disabled"}`));
+    } catch (error) {
+      console.error(chalk.red("❌ Config doctor failed:"), error);
       process.exit(1);
     }
   });

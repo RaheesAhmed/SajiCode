@@ -5,8 +5,15 @@ import { promisify } from "util";
 import fs from "fs/promises";
 import path from "path";
 import { scanFileForSecurityIssues } from "../tools/validation-tools.js";
+import { auditToolCall, auditToolBlock } from "../audit/audit-log.js";
 
 const execFileAsync = promisify(execFile);
+
+let auditProjectPath: string | null = null;
+
+export function setAuditProjectPath(projectPath: string | null): void {
+  auditProjectPath = projectPath;
+}
 
 const BLOCKED_DIRECTORIES = new Set([
   "node_modules", ".git", ".next", ".nuxt", "dist", "build",
@@ -257,11 +264,16 @@ export const contextGuardMiddleware = createMiddleware({
   ) => {
     const { name: toolName, args } = request.toolCall;
 
+    if (auditProjectPath) {
+      void auditToolCall(auditProjectPath, toolName, args);
+    }
+
     // ── Block directory listing on excluded directories ─────────────────────
     if (toolName === "list_dir" || toolName === "ls" || toolName === "glob") {
       const targetPath = (args["path"] ?? args["directory"] ?? args["pattern"] ?? "") as string;
       const { blocked, reason } = isBlockedPath(targetPath);
       if (blocked) {
+        if (auditProjectPath) void auditToolBlock(auditProjectPath, toolName, reason);
         return new ToolMessage({
           name: toolName,
           content: reason,
@@ -277,6 +289,7 @@ export const contextGuardMiddleware = createMiddleware({
 
       const { blocked, reason } = isBlockedPath(filePath);
       if (blocked) {
+        if (auditProjectPath) void auditToolBlock(auditProjectPath, toolName, reason);
         return new ToolMessage({
           name: toolName,
           content: reason,
@@ -305,6 +318,10 @@ export const contextGuardMiddleware = createMiddleware({
         const scan = await scanFileForSecurityIssues(filePath, content);
 
         if (scan.blocks.length > 0) {
+          const blockReason = scan.blocks.join("; ");
+          if (auditProjectPath) {
+            void auditToolBlock(auditProjectPath, toolName, blockReason);
+          }
           return new ToolMessage({
             name: toolName,
             content: `⛔ SECURITY BLOCK — ${toolName} prevented for "${path.basename(filePath)}":\n${scan.blocks.map((b) => `  • ${b}`).join("\n")}\n\nRemove the flagged content before writing.`,

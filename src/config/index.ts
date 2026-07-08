@@ -1,6 +1,11 @@
 import fs from "fs/promises";
 import path from "path";
-import type { ModelConfig, ProjectConfig, RiskTolerance, HumanInTheLoopConfig, WhatsAppConfig } from "../types/index.js";
+import type { ModelConfig, ProjectConfig, HumanInTheLoopConfig } from "../types/index.js";
+import {
+  safeParseConfigFile,
+  findUnknownConfigKeys,
+  type ConfigFileInput,
+} from "./schema.js";
 
 const DEFAULT_MODEL_CONFIG: ModelConfig = {
   provider: "ollama",
@@ -14,13 +19,10 @@ const DEFAULT_MODEL_CONFIG: ModelConfig = {
 const DEFAULT_HUMAN_IN_THE_LOOP: HumanInTheLoopConfig = {
   enabled: false,
   tools: {
-    // Shell execution with security checks
     execute: { allowedDecisions: ["approve", "edit", "reject"] },
-    // File operations
     delete_file: { allowedDecisions: ["approve", "reject"] },
-    write_file: false, // Auto-approve writes (security checks handle dangerous patterns)
-    edit_file: false,  // Auto-approve edits
-    // Memory operations (auto-approve - agents need memory access)
+    write_file: false,
+    edit_file: false,
     read_memory_index: false,
     read_topic: false,
     write_memory_topic: false,
@@ -28,28 +30,23 @@ const DEFAULT_HUMAN_IN_THE_LOOP: HumanInTheLoopConfig = {
     append_transcript: false,
   },
   allowedCommands: [
-    // Package managers
     "npm install",
     "npm run",
     "npm test",
     "npx tsc",
     "npx tsx",
-    // Safe file operations
     "mkdir",
     "touch",
     "cat ",
     "echo ",
-    // Safe navigation
     "cd ",
     "pwd",
     "ls ",
     "dir ",
-    // Safe git operations
     "git status",
     "git log",
     "git diff",
     "git branch",
-    // Node/Python execution (security checks will catch dangerous patterns)
     "node ",
     "python ",
     "python3 ",
@@ -70,56 +67,105 @@ export function getDefaultConfig(projectPath: string): ProjectConfig {
   };
 }
 
+function mergeConfigFromFile(
+  projectPath: string,
+  defaults: ProjectConfig,
+  fileConfig: ConfigFileInput,
+): ProjectConfig {
+  const modelFromFile = fileConfig.model ?? fileConfig.modelConfig ?? {};
+
+  return {
+    projectPath,
+    modelConfig: {
+      ...defaults.modelConfig,
+      ...modelFromFile,
+    },
+    riskTolerance: fileConfig.riskTolerance ?? defaults.riskTolerance,
+    humanInTheLoop: {
+      ...defaults.humanInTheLoop!,
+      ...(fileConfig.humanInTheLoop ?? {}),
+      tools: {
+        ...defaults.humanInTheLoop!.tools,
+        ...(fileConfig.humanInTheLoop?.tools ?? {}),
+      },
+      allowedCommands:
+        fileConfig.humanInTheLoop?.allowedCommands
+        ?? defaults.humanInTheLoop!.allowedCommands,
+    },
+    whatsapp: {
+      ...defaults.whatsapp!,
+      ...(fileConfig.whatsapp ?? {}),
+    },
+    hooks: {
+      ...defaults.hooks,
+      ...(fileConfig.hooks ?? {}),
+    },
+  };
+}
+
 export async function loadConfig(projectPath: string): Promise<ProjectConfig> {
   const configPath = path.join(projectPath, CONFIG_DIR, CONFIG_FILE);
   const defaults = getDefaultConfig(projectPath);
 
   try {
-    const raw = await fs.readFile(configPath, "utf-8");
-    const fileConfig = JSON.parse(raw) as Partial<{
-      model: Partial<ModelConfig>;
-      riskTolerance: RiskTolerance;
-      humanInTheLoop: Partial<HumanInTheLoopConfig>;
-      whatsapp: Partial<WhatsAppConfig>;
-      hooks: Partial<import("../types/index.js").HooksConfig>;
-    }>;
+    const rawText = await fs.readFile(configPath, "utf-8");
+    const rawJson = JSON.parse(rawText) as Record<string, unknown>;
+    const parsed = safeParseConfigFile(rawJson);
 
-    return {
-      projectPath,
-      modelConfig: {
-        ...defaults.modelConfig,
-        ...(fileConfig.model ?? {}),
-      },
-      riskTolerance: fileConfig.riskTolerance ?? defaults.riskTolerance,
-      humanInTheLoop: {
-        ...defaults.humanInTheLoop!,
-        ...(fileConfig.humanInTheLoop ?? {}),
-        tools: {
-          ...defaults.humanInTheLoop!.tools,
-          ...(fileConfig.humanInTheLoop?.tools ?? {}),
-        },
-        allowedCommands: fileConfig.humanInTheLoop?.allowedCommands
-          ?? defaults.humanInTheLoop!.allowedCommands,
-      },
-      whatsapp: {
-        ...defaults.whatsapp!,
-        ...(fileConfig.whatsapp ?? {}),
-      },
-      hooks: {
-        ...defaults.hooks,
-        ...(fileConfig.hooks ?? {}),
-      },
-    };
+    if (!parsed.success) {
+      console.warn(parsed.error);
+      return defaults;
+    }
+
+    const unknownKeys = findUnknownConfigKeys(rawJson);
+    if (unknownKeys.length > 0) {
+      console.warn(
+        `Unknown keys in .sajicode/config.json (ignored): ${unknownKeys.join(", ")}`,
+      );
+    }
+
+    return mergeConfigFromFile(projectPath, defaults, parsed.data);
   } catch {
-    // No config file — write the default so user can see/edit it
     await ensureDefaultConfig(projectPath, defaults);
     return defaults;
   }
 }
 
+export async function resolveConfigForDoctor(
+  projectPath: string,
+): Promise<{ config: ProjectConfig; warnings: string[] }> {
+  const configPath = path.join(projectPath, CONFIG_DIR, CONFIG_FILE);
+  const defaults = getDefaultConfig(projectPath);
+  const warnings: string[] = [];
+
+  try {
+    const rawText = await fs.readFile(configPath, "utf-8");
+    const rawJson = JSON.parse(rawText) as Record<string, unknown>;
+    const parsed = safeParseConfigFile(rawJson);
+
+    if (!parsed.success) {
+      warnings.push(parsed.error);
+      return { config: defaults, warnings };
+    }
+
+    const unknownKeys = findUnknownConfigKeys(rawJson);
+    if (unknownKeys.length > 0) {
+      warnings.push(`Unknown keys ignored: ${unknownKeys.join(", ")}`);
+    }
+
+    return {
+      config: mergeConfigFromFile(projectPath, defaults, parsed.data),
+      warnings,
+    };
+  } catch (error) {
+    warnings.push(`No config file at ${configPath} — using defaults`);
+    return { config: defaults, warnings };
+  }
+}
+
 async function ensureDefaultConfig(
   projectPath: string,
-  config: ProjectConfig
+  config: ProjectConfig,
 ): Promise<void> {
   try {
     const configDir = path.join(projectPath, CONFIG_DIR);
@@ -134,7 +180,7 @@ async function ensureDefaultConfig(
     };
     await fs.writeFile(configPath, JSON.stringify(serializable, null, 2), "utf-8");
   } catch {
-    // non-fatal — config is optional
+    // non-fatal
   }
 }
 

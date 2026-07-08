@@ -35,7 +35,6 @@ import { createMemoryTools } from "../tools/memory-tools.js";
 import { createIntelligenceTools } from "../tools/intelligence-tools.js";
 import { createMultiFileEditorTools } from "../tools/multi-file-editor.js";
 import { createTeamContextTools } from "../tools/team-context.js";
-import { MCPClientManager } from "../mcp/MCPClient.js";
 import { createGitSessionTools } from "../tools/git-session.js";
 import { createContractTools } from "../tools/contract-tools.js";
 import { createValidationTools } from "../tools/validation-tools.js";
@@ -43,6 +42,7 @@ import { createRepoLoaderTools } from "../tools/repo-loader.js";
 import { createProjectDnaTools } from "../memory/project-dna.js";
 import { createPatternTools } from "../memory/pattern-library.js";
 import { createStandupTools } from "../tools/standup.js";
+import type { ProjectCheckpointer } from "../memory/checkpointer.js";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -129,10 +129,16 @@ ${lines}
 
 // ── Core factory ───────────────────────────────────────────────────────────────
 
+export interface AgentFactoryOptions {
+  mcpTools?: any[];
+  checkpointer?: ProjectCheckpointer;
+}
+
 export async function createAgentFromSpec(
   spec: AgentSpec,
   model: BaseChatModel,
   projectPath: string,
+  options: AgentFactoryOptions = {},
 ): Promise<CompiledSubAgent> {
   const backend = new SafeShellBackend({ rootDir: projectPath, projectPath });
   const platform = getPlatformPrompt(projectPath);
@@ -161,9 +167,7 @@ export async function createAgentFromSpec(
     .filter(Boolean)
     .join("\n");
 
-  const mcpClient = new MCPClientManager(projectPath);
-  await mcpClient.initialize();
-  const mcpTools = await mcpClient.getTools();
+  const mcpTools = options.mcpTools ?? [];
 
   const tools = [
     createUpdateAgentMemoryTool(projectPath, spec.name),
@@ -195,7 +199,7 @@ export async function createAgentFromSpec(
     name: spec.name,
     model,
     backend,
-    checkpointer: new MemorySaver(),
+    checkpointer: options.checkpointer ?? new MemorySaver(),
     skills,
     tools: tools as any,
     subagents: [],

@@ -41,6 +41,29 @@ export async function saveContracts(projectPath: string, store: ContractStore): 
   await writeFile(filePath, JSON.stringify(store, null, 2), "utf-8");
 }
 
+export function detectContractFileConflicts(
+  drafts: ContractDraft[],
+): Array<{ file: string; owners: string[] }> {
+  const fileOwners = new Map<string, string[]>();
+
+  for (const draft of drafts) {
+    for (const file of draft.filesWillWrite) {
+      const owners = fileOwners.get(file) ?? [];
+      owners.push(draft.agentName);
+      fileOwners.set(file, owners);
+    }
+  }
+
+  const conflicts: Array<{ file: string; owners: string[] }> = [];
+  for (const [file, owners] of fileOwners.entries()) {
+    if (owners.length > 1) {
+      conflicts.push({ file, owners });
+    }
+  }
+
+  return conflicts;
+}
+
 export function createContractTools(projectPath: string) {
   return [
     tool(
@@ -119,26 +142,14 @@ export function createContractTools(projectPath: string) {
         }
 
         // Detect file write conflicts
-        const fileOwners = new Map<string, string[]>();
-        for (const draft of store.drafts) {
-          for (const file of draft.filesWillWrite) {
-            const owners = fileOwners.get(file) ?? [];
-            owners.push(draft.agentName);
-            fileOwners.set(file, owners);
-          }
-        }
-
-        const conflicts: string[] = [];
-        for (const [file, owners] of fileOwners.entries()) {
-          if (owners.length > 1) {
-            conflicts.push(`  "${file}" claimed by: ${owners.join(", ")}`);
-          }
-        }
+        const conflicts = detectContractFileConflicts(store.drafts);
 
         if (conflicts.length > 0) {
           const lines: string[] = [
             "Cannot finalize contracts — file write conflicts detected:",
-            ...conflicts,
+            ...conflicts.map(
+              (c) => `  "${c.file}" claimed by: ${c.owners.join(", ")}`,
+            ),
             "",
             "Agents must resolve these conflicts by updating their drafts before finalization.",
           ];

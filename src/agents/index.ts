@@ -1,6 +1,5 @@
 import { createDeepAgent, CompositeBackend, StoreBackend } from "deepagents";
 import { SafeShellBackend, createExecuteTool } from "../tools/shell-wrapper.js";
-import { MemorySaver } from "@langchain/langgraph";
 import { InMemoryStore } from "@langchain/langgraph-checkpoint";
 import type { ProjectConfig, OnboardingResult, HumanInTheLoopConfig } from "../types/index.js";
 import { createPmPrompt } from "../prompts/pm.js";
@@ -17,7 +16,7 @@ import { MCPClientManager } from "../mcp/MCPClient.js";
 import { createContextBriefingTool } from "../tools/context-briefing.js";
 import { createExperienceTools } from "../tools/experience-tools.js";
 import { createSessionStateTools } from "../memory/session-state.js";
-import { contextGuardMiddleware } from "./context-guard.js";
+import { contextGuardMiddleware, setAuditProjectPath } from "./context-guard.js";
 import {
   toolRetryMiddleware,
   modelRetryMiddleware,
@@ -41,6 +40,7 @@ import { createContractTools } from "../tools/contract-tools.js";
 import { createPatternTools } from "../memory/pattern-library.js";
 import { createValidationTools } from "../tools/validation-tools.js";
 import { createStandupTools } from "../tools/standup.js";
+import { getCheckpointer, saveCurrentThread } from "../memory/index.js";
 
 function buildInterruptOn(
   hitl: HumanInTheLoopConfig | undefined
@@ -66,6 +66,9 @@ export async function createSajiCode(
 ): Promise<{ agent: any; sessionConfig: Record<string, any>; mcpClient: MCPClientManager }> {
   const { config, onboardingResult, threadId } = options;
 
+  setAuditProjectPath(config.projectPath);
+  await saveCurrentThread(config.projectPath, threadId);
+
   const model = await createModel(config.modelConfig);
 
   // Initialize three-layer memory structure
@@ -85,7 +88,7 @@ export async function createSajiCode(
     contextPrompt,
   ].filter(Boolean).join("\n\n");
 
-  const checkpointer = new MemorySaver();
+  const checkpointer = await getCheckpointer(config.projectPath);
   const store = new InMemoryStore();
   const contextTools = createContextTools(config.projectPath);
   const repoMapTool = createRepoMapTool(config.projectPath);
@@ -96,7 +99,10 @@ export async function createSajiCode(
 
   await ensureSajiCodeDir(config.projectPath);
 
-  const domainHeads = await createAllDomainHeads(model, config.projectPath);
+  const domainHeads = await createAllDomainHeads(model, config.projectPath, {
+    mcpTools,
+    checkpointer,
+  });
   const agentSpecs = await loadAllSpecs();
   const registryTools = createAgentRegistryTools(agentSpecs);
   const interruptOn = buildInterruptOn(config.humanInTheLoop);
@@ -205,7 +211,7 @@ export async function createInitAgent(
     projectPath: config.projectPath,
   });
 
-  const checkpointer = new MemorySaver();
+  const checkpointer = await getCheckpointer(config.projectPath);
   const contextTools = createContextTools(config.projectPath);
   const repoMapTool = createRepoMapTool(config.projectPath);
 

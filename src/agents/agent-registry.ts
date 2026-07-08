@@ -5,7 +5,7 @@ import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import type { CompiledSubAgent } from "deepagents";
-import { createAgentFromSpec, AGENT_PRESETS, type AgentSpec } from "./agent-factory.js";
+import { createAgentFromSpec, AGENT_PRESETS, type AgentSpec, type AgentFactoryOptions } from "./agent-factory.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -102,13 +102,14 @@ function jsonToAgentSpec(json: AgentSpecJson): AgentSpec {
 export async function createAllRegisteredAgents(
   model: BaseChatModel,
   projectPath: string,
+  factoryOptions: AgentFactoryOptions = {},
 ): Promise<CompiledSubAgent[]> {
   const jsonSpecs = await loadAllSpecs();
 
   if (jsonSpecs.length > 0) {
     return Promise.all(
       jsonSpecs.map((json) =>
-        createAgentFromSpec(jsonToAgentSpec(json), model, projectPath),
+        createAgentFromSpec(jsonToAgentSpec(json), model, projectPath, factoryOptions),
       ),
     );
   }
@@ -116,7 +117,7 @@ export async function createAllRegisteredAgents(
   // Fallback to hardcoded presets
   return Promise.all(
     Object.values(AGENT_PRESETS).map((spec) =>
-      createAgentFromSpec(spec, model, projectPath),
+      createAgentFromSpec(spec, model, projectPath, factoryOptions),
     ),
   );
 }
