@@ -1,5 +1,6 @@
 import { createDeepAgent, CompositeBackend, StoreBackend } from "deepagents";
-import { SafeShellBackend, createExecuteTool } from "../tools/shell-wrapper.js";
+import { createExecuteTool } from "../tools/shell-wrapper.js";
+import { createShellBackend } from "../tools/sandbox-backend.js";
 import { InMemoryStore } from "@langchain/langgraph-checkpoint";
 import type { ProjectConfig, OnboardingResult, HumanInTheLoopConfig } from "../types/index.js";
 import { createPmPrompt } from "../prompts/pm.js";
@@ -9,6 +10,12 @@ import { createContextTools } from "../tools/context-tools.js";
 import { createWebSearchTool } from "../tools/web-search.js";
 import { createRepoMapTool } from "../tools/repo-map.js";
 import { createAllDomainHeads } from "./domain-heads.js";
+import {
+  buildAsyncSubAgentSpecs,
+  isAsyncSubagentsEnabled,
+  stopAgentProtocolSession,
+} from "./async-subagents.js";
+import { getActiveAgentProtocolServer, startAgentProtocolSession } from "./local-agent-protocol.js";
 import { loadAllSpecs, createAgentRegistryTools } from "./agent-registry.js";
 import { createModelForAgent } from "../llms/model-factory.js";
 import { getAllSkillPaths } from "../utils/skills.js";
@@ -47,6 +54,8 @@ import { createMessagingTools } from "../tools/messaging-tools.js";
 import { createSemanticMemoryTools } from "../tools/semantic-memory-tools.js";
 import { createAdrTools } from "../tools/adr-tools.js";
 import { createPromoteSkillTool } from "../skills/promote.js";
+import { createSmokeCheckTools } from "../tools/verification-ladder.js";
+import { createDeployTools, createCiTools } from "../tools/deploy-tools.js";
 import { finalizeSession } from "../observability/session-end.js";
 import { getCheckpointer, saveCurrentThread } from "../memory/index.js";
 
@@ -106,7 +115,9 @@ export async function createSajiCode(
 
   const projectContext = await loadProjectContext(config.projectPath);
   const contextPrompt = buildContextPrompt(onboardingResult);
-  const pmPrompt = createPmPrompt(config.projectPath);
+  const pmPrompt = createPmPrompt(config.projectPath, {
+    asyncSubagents: isAsyncSubagentsEnabled(config.asyncSubagents),
+  });
   const fullSystemPrompt = [
     pmPrompt,
     memoryPrompt, // Add memory pointer index to system prompt
@@ -128,11 +139,28 @@ export async function createSajiCode(
 
   await ensureSajiCodeDir(config.projectPath);
 
+  const asyncEnabled = isAsyncSubagentsEnabled(config.asyncSubagents);
+  let agentProtocolUrl = config.asyncSubagents?.url?.replace(/\/$/, "") ?? "";
+
+  if (asyncEnabled && !agentProtocolUrl) {
+    const session = await startAgentProtocolSession([]);
+    agentProtocolUrl = session.url;
+  }
+
   const factoryOptions = {
     mcpClient,
     checkpointer,
     pluginSkillRoots: pluginContributions.skillRoots,
     baseModelConfig: config.modelConfig,
+    sandbox: config.sandbox,
+    ...(agentProtocolUrl
+      ? {
+          agentProtocolUrl,
+          ...(config.asyncSubagents?.headers
+            ? { agentProtocolHeaders: config.asyncSubagents.headers }
+            : {}),
+        }
+      : {}),
   };
 
   const domainHeads = await createAllDomainHeads(
@@ -146,6 +174,30 @@ export async function createSajiCode(
     },
     pluginContributions.agentSpecPaths,
   );
+
+  const protocolServer = getActiveAgentProtocolServer();
+  if (protocolServer) {
+    for (const head of domainHeads) {
+      protocolServer.registerGraph(
+        head.name,
+        head.runnable as { invoke: (input: unknown, config?: Record<string, unknown>) => Promise<unknown> },
+      );
+    }
+  }
+
+  const asyncSpecs =
+    asyncEnabled && agentProtocolUrl
+      ? buildAsyncSubAgentSpecs(domainHeads, {
+          url: agentProtocolUrl,
+          ...(config.asyncSubagents?.headers
+            ? { headers: config.asyncSubagents.headers }
+            : {}),
+        })
+      : [];
+
+  const subagents = asyncSpecs.length > 0
+    ? [...asyncSpecs, ...domainHeads]
+    : domainHeads;
   const agentSpecs = await loadAllSpecs(pluginContributions.agentSpecPaths);
   const registryTools = createAgentRegistryTools(agentSpecs);
   const interruptOn = buildInterruptOn(config.humanInTheLoop);
@@ -161,9 +213,10 @@ export async function createSajiCode(
   const teamContextTools = createTeamContextTools(config.projectPath);
 
   // Build the shell backend for the PM agent
-  const shellBackend = new SafeShellBackend({
+  const shellBackend = createShellBackend({
     rootDir: config.projectPath,
     projectPath: config.projectPath,
+    ...(config.sandbox ? { sandbox: config.sandbox } : {}),
   });
   const executeTool = createExecuteTool(shellBackend);
 
@@ -215,10 +268,13 @@ export async function createSajiCode(
       ...createSemanticMemoryTools(config.projectPath, config.modelConfig),
       ...createAdrTools(config.projectPath),
       createPromoteSkillTool(config.projectPath),
+      ...createSmokeCheckTools(config.projectPath),
+      ...createDeployTools(config.projectPath),
+      ...createCiTools(config.projectPath),
       // Dynamic agent registry: list_available_agents + pick_best_agent
       ...registryTools,
     ] as any,
-    subagents: domainHeads as any,
+    subagents: subagents as any,
     middleware: [
       // Clear old tool results at ~125k tokens — keeps PM context lean without a second LLM call
       contextEditingMiddleware({
@@ -248,7 +304,7 @@ export async function createSajiCode(
   return { agent, sessionConfig, mcpClient };
 }
 
-export { finalizeSession };
+export { finalizeSession, stopAgentProtocolSession };
 
 export async function createInitAgent(
   config: ProjectConfig,
@@ -265,9 +321,10 @@ export async function createInitAgent(
     },
   );
 
-  const backend = new SafeShellBackend({
+  const backend = createShellBackend({
     rootDir: config.projectPath,
     projectPath: config.projectPath,
+    ...(config.sandbox ? { sandbox: config.sandbox } : {}),
   });
 
   const checkpointer = await getCheckpointer(config.projectPath);

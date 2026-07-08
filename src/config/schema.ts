@@ -68,6 +68,19 @@ const budgetSchema = z.object({
   action: z.enum(["warn", "pause"]).optional(),
 });
 
+const sandboxSchema = z.object({
+  mode: z.enum(["none", "docker"]).optional(),
+  image: z.string().optional(),
+  network: z.enum(["bridge", "none"]).optional(),
+});
+
+const asyncSubagentsSchema = z.object({
+  enabled: z.boolean().optional(),
+  url: z.string().optional(),
+  port: z.number().int().min(0).optional(),
+  headers: z.record(z.string()).optional(),
+});
+
 const hooksSchema = z.object({
   sessionStart: hookEventSchema.optional(),
   sessionEnd: hookEventSchema.optional(),
@@ -91,6 +104,8 @@ const KNOWN_CONFIG_KEYS = new Set([
   "modelConfig",
   "modelRouting",
   "budget",
+  "sandbox",
+  "asyncSubagents",
   "riskTolerance",
   "humanInTheLoop",
   "whatsapp",
@@ -103,6 +118,8 @@ export const configFileSchema = z.object({
   modelConfig: modelConfigSchema.optional(),
   modelRouting: modelRoutingSchema.optional(),
   budget: budgetSchema.optional(),
+  sandbox: sandboxSchema.optional(),
+  asyncSubagents: asyncSubagentsSchema.optional(),
   riskTolerance: riskToleranceSchema.optional(),
   humanInTheLoop: humanInTheLoopSchema.optional(),
   whatsapp: whatsAppSchema.optional(),

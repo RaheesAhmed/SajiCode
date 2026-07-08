@@ -24,11 +24,29 @@ export interface BudgetConfig {
   action?: "warn" | "pause";
 }
 
+export interface SandboxConfig {
+  mode?: "none" | "docker";
+  image?: string;
+  network?: "bridge" | "none";
+}
+
+export interface AsyncSubagentsConfig {
+  /** Default true — uses embedded local Agent Protocol when url is omitted */
+  enabled?: boolean;
+  /** External LangGraph / Agent Protocol server URL (skip embedded server) */
+  url?: string;
+  /** Optional fixed port for embedded server (0 = ephemeral) */
+  port?: number;
+  headers?: Record<string, string>;
+}
+
 export interface ProjectConfig {
   projectPath: string;
   modelConfig: ModelConfig;
   modelRouting?: ModelRoutingConfig;
   budget?: BudgetConfig;
+  sandbox?: SandboxConfig;
+  asyncSubagents?: AsyncSubagentsConfig;
   riskTolerance: RiskTolerance;
   humanInTheLoop?: HumanInTheLoopConfig;
   whatsapp?: WhatsAppConfig;

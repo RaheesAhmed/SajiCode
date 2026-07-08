@@ -59,6 +59,12 @@ function deepMergeConfig(
     budget: overlay.budget
       ? { ...(base.budget ?? {}), ...overlay.budget }
       : base.budget,
+    sandbox: overlay.sandbox
+      ? { ...(base.sandbox ?? {}), ...overlay.sandbox }
+      : base.sandbox,
+    asyncSubagents: overlay.asyncSubagents
+      ? { ...(base.asyncSubagents ?? {}), ...overlay.asyncSubagents }
+      : base.asyncSubagents,
   };
 }
 

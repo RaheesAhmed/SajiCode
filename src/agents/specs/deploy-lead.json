@@ -17,6 +17,9 @@
     "docker-compose.yml for local development",
     "GitHub Actions CI: cache → test → build → deploy stages",
     "Health check endpoint wired in compose and k8s manifests",
+    "Use deploy_preview for Vercel/Railway/Fly/Netlify — feed preview URL to qa-lead E2E",
+    "Use create_pull_request with verification ladder results in PR body",
+    "Use fetch_ci_failure_log to diagnose red CI before fixing",
     "Proper .gitignore and .dockerignore"
   ],
   "artifactFormat": "files created, deployment instructions, environment variables required"

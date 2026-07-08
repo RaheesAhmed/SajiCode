@@ -29,6 +29,7 @@ import {
   formatPluginConsent,
 } from "../plugins/registry.js";
 import { formatCostsReport } from "../observability/usage-tracker.js";
+import { fetchLatestCiFailureLog } from "../tools/deploy-tools.js";
 
 /** Heavy agent stack — only load for build/resume/audit, not config-doctor. */
 async function loadAgentRuntime() {
@@ -639,6 +640,74 @@ skillCmd
     const results = await lintSkills(options.path);
     console.log(chalk.cyan(formatLintResults(results)));
     if (results.some((r) => !r.ok)) process.exit(1);
+  });
+
+program
+  .command("fix-ci")
+  .description("Fetch latest failed CI log and run headless agent to fix it")
+  .option("-p, --path <path>", "Project directory", process.cwd())
+  .option("-H, --headless", "Run without UI", true)
+  .action(async (options: { path: string; headless: boolean }) => {
+    const {
+      createSajiCode,
+      generateThreadId,
+      StreamRenderer,
+      setAuditProjectPath,
+    } = await loadAgentRuntime();
+
+    const projectPath = options.path;
+    await ensureProjectDir(projectPath);
+    setAuditProjectPath(projectPath);
+
+    const ciLog = await fetchLatestCiFailureLog(projectPath);
+    if (!ciLog.ok) {
+      console.error(chalk.red(`❌ ${ciLog.log}`));
+      process.exit(1);
+    }
+
+    const config = await loadConfig(projectPath);
+    const renderer = new StreamRenderer(true);
+    const threadId = generateThreadId();
+
+    console.log(chalk.yellow("🔧 SajiCode fix-ci — analyzing failed pipeline...\n"));
+    if (ciLog.runUrl) {
+      console.log(chalk.gray(`  Run: ${ciLog.runUrl}\n`));
+    }
+
+    const { agent, sessionConfig, mcpClient } = await createSajiCode({
+      config,
+      onboardingResult: {
+        experienceLevel: "expert",
+        projectDescription: "Fix failing CI pipeline",
+        projectType: "fix-ci",
+        features: ["ci-fix"],
+        stackPreferences: {},
+      },
+      threadId,
+    });
+
+    const prompt = [
+      "The CI pipeline failed. Fix the issue locally, verify with npm run build && npm test, then summarize changes.",
+      "",
+      "Failed CI log:",
+      ciLog.log,
+    ].join("\n");
+
+    try {
+      const stream = await agent.stream(
+        { messages: [{ role: "user", content: prompt }] },
+        {
+          ...sessionConfig,
+          streamMode: ["updates", "messages", "custom"],
+          subgraphs: true,
+        },
+      );
+      await renderer.processMultiStream(stream as any);
+      await mcpClient.close();
+    } catch (error) {
+      renderer.printError(error instanceof Error ? error : new Error(String(error)));
+      process.exit(1);
+    }
   });
 
 program

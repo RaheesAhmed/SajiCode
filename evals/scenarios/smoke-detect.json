@@ -1,0 +1,18 @@
+{
+  "name": "smoke-check-detect",
+  "description": "Smoke config detection from package.json scripts",
+  "assertions": [
+    {
+      "type": "smoke-detect",
+      "packageJson": {
+        "scripts": {
+          "dev": "next dev -p 3000"
+        }
+      },
+      "expect": {
+        "startCommand": "next dev -p 3000",
+        "healthUrl": "http://localhost:3000/"
+      }
+    }
+  ]
+}

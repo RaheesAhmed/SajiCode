@@ -79,6 +79,8 @@ function mergeConfigFromFile(
     },
     ...(fileConfig.modelRouting ? { modelRouting: fileConfig.modelRouting } : {}),
     ...(fileConfig.budget ? { budget: fileConfig.budget } : {}),
+    ...(fileConfig.sandbox ? { sandbox: fileConfig.sandbox } : {}),
+    ...(fileConfig.asyncSubagents ? { asyncSubagents: fileConfig.asyncSubagents } : {}),
     riskTolerance: fileConfig.riskTolerance ?? defaults.riskTolerance,
     humanInTheLoop: {
       ...defaults.humanInTheLoop!,

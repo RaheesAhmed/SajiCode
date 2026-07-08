@@ -1,12 +1,13 @@
 import { writeSessionReport } from "./session-report.js";
 import { formatCostsReport } from "./usage-tracker.js";
-
+import { stopAgentProtocolSession } from "../agents/local-agent-protocol.js";
 export async function finalizeSession(
   projectPath: string,
   sessionId: string,
   threadId?: string,
 ): Promise<void> {
   try {
+    await stopAgentProtocolSession();
     const reportPath = await writeSessionReport({
       sessionId,
       projectPath,

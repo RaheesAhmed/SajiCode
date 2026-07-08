@@ -1,0 +1,24 @@
+name: SajiCode Fix CI
+description: Run SajiCode headless to fix a failing GitHub Actions workflow
+inputs:
+  project-path:
+    description: Project directory
+    required: false
+    default: "."
+runs:
+  using: composite
+  steps:
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: "20"
+    - name: Install SajiCode
+      shell: bash
+      run: npm install -g sajicode
+    - name: Run fix-ci
+      shell: bash
+      run: sajicode fix-ci --path "${{ inputs.project-path }}" --headless
+      env:
+        OPENAI_API_KEY: ${{ env.OPENAI_API_KEY }}
+        ANTHROPIC_API_KEY: ${{ env.ANTHROPIC_API_KEY }}
+        OPENROUTER_API_KEY: ${{ env.OPENROUTER_API_KEY }}

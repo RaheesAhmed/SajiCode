@@ -1,0 +1,12 @@
+{
+  "name": "config-doctor-passes",
+  "description": "Config doctor validates layered config without errors",
+  "assertions": [
+    {
+      "type": "command",
+      "command": "node dist/index.js config-doctor",
+      "expectExitCode": 0,
+      "expectOutputContains": "Config is valid"
+    }
+  ]
+}

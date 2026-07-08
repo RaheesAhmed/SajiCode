@@ -16,6 +16,7 @@ const CLI_SUBCOMMANDS = new Set([
   "mcp",
   "plugin",
   "costs",
+  "fix-ci",
 ]);
 
 /** Strip Node/npm `--` separator so `node dist/index.js -- mcp list` works. */

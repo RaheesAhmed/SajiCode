@@ -1,5 +1,5 @@
-import { createDeepAgent } from "deepagents";
-import { SafeShellBackend } from "../tools/shell-wrapper.js";
+import { createDeepAgent, createCompletionCallbackMiddleware } from "deepagents";
+import { createShellBackend } from "../tools/sandbox-backend.js";
 import type { CompiledSubAgent } from "deepagents";
 import { MemorySaver } from "@langchain/langgraph";
 import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
@@ -46,9 +46,12 @@ import { createStandupTools } from "../tools/standup.js";
 import { createMessagingTools } from "../tools/messaging-tools.js";
 import { createSemanticMemoryTools } from "../tools/semantic-memory-tools.js";
 import { createPromoteSkillTool } from "../skills/promote.js";
+import { createSmokeCheckTools } from "../tools/verification-ladder.js";
+import { createE2ETools } from "../tools/e2e-tools.js";
+import { createDeployTools, createCiTools } from "../tools/deploy-tools.js";
 import type { ProjectCheckpointer } from "../memory/checkpointer.js";
 import type { MCPClientManager } from "../mcp/MCPClient.js";
-import type { ModelConfig } from "../types/index.js";
+import type { ModelConfig, SandboxConfig } from "../types/index.js";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -141,6 +144,10 @@ export interface AgentFactoryOptions {
   checkpointer?: ProjectCheckpointer;
   pluginSkillRoots?: string[];
   baseModelConfig?: ModelConfig;
+  sandbox?: SandboxConfig;
+  /** When set, leads notify pm-agent on completion via async callback middleware */
+  agentProtocolUrl?: string;
+  agentProtocolHeaders?: Record<string, string>;
 }
 
 export async function createAgentFromSpec(
@@ -149,7 +156,11 @@ export async function createAgentFromSpec(
   projectPath: string,
   options: AgentFactoryOptions = {},
 ): Promise<CompiledSubAgent> {
-  const backend = new SafeShellBackend({ rootDir: projectPath, projectPath });
+  const backend = createShellBackend({
+    rootDir: projectPath,
+    projectPath,
+    ...(options.sandbox ? { sandbox: options.sandbox } : {}),
+  });
   const platform = getPlatformPrompt(projectPath);
   const skills = (spec.primarySkills && spec.primarySkills.length > 0)
     ? getSkillPaths(spec.primarySkills, projectPath, options.pluginSkillRoots) as any
@@ -206,8 +217,17 @@ export async function createAgentFromSpec(
     ...createMessagingTools(projectPath, spec.name),
     ...createSemanticMemoryTools(projectPath, options.baseModelConfig),
     createPromoteSkillTool(projectPath),
+    ...createSmokeCheckTools(projectPath),
     createRepoLoaderTools(projectPath),
   ];
+
+  if (spec.name === "qa-lead") {
+    tools.push(...createE2ETools(projectPath));
+  }
+
+  if (spec.name === "deploy-lead" || spec.name === "pm-agent") {
+    tools.push(...createDeployTools(projectPath), ...createCiTools(projectPath));
+  }
 
   const agent = await createDeepAgent({
     name: spec.name,
@@ -229,6 +249,17 @@ export async function createAgentFromSpec(
       leadJudgmentMiddleware,
       hookMiddleware,
       contextGuardMiddleware,
+      ...(options.agentProtocolUrl
+        ? [
+            createCompletionCallbackMiddleware({
+              callbackGraphId: "pm-agent",
+              url: options.agentProtocolUrl,
+              ...(options.agentProtocolHeaders
+                ? { headers: options.agentProtocolHeaders }
+                : {}),
+            }),
+          ]
+        : []),
     ] as any,
   });
 

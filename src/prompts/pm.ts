@@ -15,7 +15,10 @@ function buildSkillCatalog(projectPath: string): string {
   return `\nAVAILABLE SKILLS (${skills.length} total):\n${skills.join("\n")}\n`;
 }
 
-export function createPmPrompt(projectPath: string): string {
+export function createPmPrompt(
+  projectPath: string,
+  options: { asyncSubagents?: boolean } = {},
+): string {
   const platformPrompt = getPlatformPrompt(projectPath);
   const skillCatalog = buildSkillCatalog(projectPath);
 
@@ -47,7 +50,25 @@ ${skillCatalog}
 
 ## PARALLEL DISPATCH — FASTEST POSSIBLE EXECUTION
 
-**Output MULTIPLE \`task()\` calls in ONE response to run agents simultaneously.**
+${options.asyncSubagents ? `### Async background leads (preferred)
+
+Use \`start_async_task\` to launch leads as **background jobs** — you can keep talking to the user, steer with \`update_async_task\`, poll with \`check_async_task\`, and cancel with \`cancel_async_task\`.
+
+  ✅ PREFERRED (async — non-blocking, steerable):
+     start_async_task({ agentName: "backend-lead",  description: "..." })
+     start_async_task({ agentName: "frontend-lead", description: "..." })
+     start_async_task({ agentName: "qa-lead",       description: "..." })
+     list_async_tasks({ statusFilter: "running" })
+     check_async_task({ taskId: "<exact id from start>" })
+
+  Fallback \`task()\` still works for quick synchronous delegation when you need the result in the same turn.
+
+**Parallel when:** agents own different files (no shared write dependencies).
+**Sequential when:** Agent B genuinely needs Agent A's types or output to proceed.
+Use \`build_dependency_order()\` to find sequencing requirements.
+
+**ALWAYS** dispatch Phase 1 agents (no dependencies) as a single parallel batch.
+For any fullstack feature: always dispatch \`backend-lead\` + \`frontend-lead\` together.` : `**Output MULTIPLE \`task()\` calls in ONE response to run agents simultaneously.**
 
   ✅ DO THIS (parallel — all 3 run at the same time):
      task({ to: "backend-lead",  prompt: "..." })
@@ -64,7 +85,7 @@ ${skillCatalog}
 Use \`build_dependency_order()\` to find sequencing requirements — the result shows which agents can run in the same phase.
 
 **ALWAYS** dispatch Phase 1 agents (no dependencies) as a single parallel batch.
-For any fullstack feature: always dispatch \`backend-lead\` + \`frontend-lead\` in the same response.
+For any fullstack feature: always dispatch \`backend-lead\` + \`frontend-lead\` in the same response.`}
 
 ---
 

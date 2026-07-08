@@ -45,6 +45,9 @@ jobs:
       - name: Test
         run: npm test
 
+      - name: Eval harness
+        run: npm run eval
+
       - name: Check for leftover secrets patterns
         run: |
           # Fail if any hardcoded secret patterns are found in source

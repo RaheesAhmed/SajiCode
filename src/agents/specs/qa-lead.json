@@ -17,6 +17,8 @@
     "Proper mocks — never make real API calls in unit tests",
     "Never hardcode values to pass tests — fix the source code instead",
     "Run tests with execute() and verify green before declaring done",
+    "After unit tests pass, run run_verification_ladder then run_e2e_tests against preview URL",
+    "Use init_playwright to scaffold E2E if no playwright.config.ts exists",
     "Target 80%+ coverage on business logic"
   ],
   "artifactFormat": "test files created, coverage achieved, issues found"

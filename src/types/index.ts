@@ -2,6 +2,8 @@ export {
   type ModelConfig,
   type ModelRoutingConfig,
   type BudgetConfig,
+  type SandboxConfig,
+  type AsyncSubagentsConfig,
   type ProjectConfig,
   type ExperienceLevel,
   type OnboardingResult,

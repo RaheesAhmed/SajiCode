@@ -135,6 +135,11 @@ export async function createAllRegisteredAgents(
     checkpointer: options.checkpointer,
     pluginSkillRoots: options.pluginSkillRoots,
     baseModelConfig: options.baseModelConfig,
+    sandbox: options.sandbox,
+    ...(options.agentProtocolUrl ? { agentProtocolUrl: options.agentProtocolUrl } : {}),
+    ...(options.agentProtocolHeaders
+      ? { agentProtocolHeaders: options.agentProtocolHeaders }
+      : {}),
   };
 
   if (jsonSpecs.length > 0) {
