@@ -68,6 +68,11 @@ function deepMergeConfig(
     policies: overlay.policies
       ? { ...(base.policies ?? {}), ...overlay.policies }
       : base.policies,
+    vault: overlay.vault ? { ...(base.vault ?? {}), ...overlay.vault } : base.vault,
+    offline: overlay.offline
+      ? { ...(base.offline ?? {}), ...overlay.offline }
+      : base.offline,
+    pluginRegistryUrl: overlay.pluginRegistryUrl ?? base.pluginRegistryUrl,
   };
 }
 

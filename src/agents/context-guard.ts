@@ -6,6 +6,10 @@ import fs from "fs/promises";
 import path from "path";
 import { scanFileForSecurityIssues } from "../tools/validation-tools.js";
 import { auditToolCall, auditToolBlock } from "../audit/audit-log.js";
+import {
+  redactInlineSecrets,
+  redactSecretFileContent,
+} from "../secrets/redact.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -375,15 +379,22 @@ export const contextGuardMiddleware = createMiddleware({
     }
 
     // ── Execute the actual tool call ─────────────────────────────────────────
-    const result = normalizeToolResultContent(await handler(request)) as any;
+    let result = normalizeToolResultContent(await handler(request)) as any;
 
     // ── Cache the full read_file content after a live read ───────────────────
     if (toolName === "read_file" && result) {
       const filePath = (args["file_path"] ?? args["path"] ?? "") as string;
-      const content = typeof result === "string"
+      let content = typeof result === "string"
         ? result
         : (result?.content ?? result?.update?.messages?.at?.(-1)?.content ?? result?.messages?.at?.(-1)?.content ?? "");
       if (typeof content === "string" && content.length > 0) {
+        content = redactSecretFileContent(content, filePath);
+        content = redactInlineSecrets(content);
+        if (typeof result === "string") {
+          result = content;
+        } else if (result && typeof result === "object" && "content" in result) {
+          (result as { content: string }).content = content;
+        }
         await cacheFile(filePath, content);
       }
     }

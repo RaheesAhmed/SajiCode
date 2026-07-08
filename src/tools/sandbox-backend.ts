@@ -1,5 +1,5 @@
 import type { ExecuteResponse, LocalShellBackendOptions } from "deepagents";
-import type { SandboxConfig } from "../types/index.js";
+import type { SandboxConfig, VaultConfig } from "../types/index.js";
 import { SafeShellBackend } from "./shell-wrapper.js";
 
 export type { SandboxConfig };
@@ -44,6 +44,7 @@ export function createShellBackend(
   options: LocalShellBackendOptions & {
     projectPath: string;
     sandbox?: SandboxConfig;
+    vault?: VaultConfig;
   },
 ): SafeShellBackend {
   if (options.sandbox?.mode === "docker") {

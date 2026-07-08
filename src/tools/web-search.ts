@@ -78,7 +78,21 @@ function parseMcpText(json: string): string | undefined {
   return undefined;
 }
 
-export function createWebSearchTool(tavilyApiKey?: string, maxResults = 3) {
+export function createWebSearchTool(tavilyApiKey?: string, maxResults = 3, offline = false) {
+  if (offline) {
+    return tool(
+      async () =>
+        "Web search is disabled in offline mode. Use local docs, repo files, and memory tools instead.",
+      {
+        name: "web_search",
+        description: "Disabled in offline mode.",
+        schema: z.object({
+          query: z.string().describe("The search query"),
+        }),
+      },
+    );
+  }
+
   const apiKey = tavilyApiKey ?? process.env["TAVILY_API_KEY"];
 
   if (apiKey) {

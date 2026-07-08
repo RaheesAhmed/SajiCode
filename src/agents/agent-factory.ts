@@ -52,7 +52,7 @@ import { createE2ETools } from "../tools/e2e-tools.js";
 import { createDeployTools, createCiTools } from "../tools/deploy-tools.js";
 import type { ProjectCheckpointer } from "../memory/checkpointer.js";
 import type { MCPClientManager } from "../mcp/MCPClient.js";
-import type { ModelConfig, SandboxConfig } from "../types/index.js";
+import type { ModelConfig, SandboxConfig, VaultConfig } from "../types/index.js";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -146,6 +146,8 @@ export interface AgentFactoryOptions {
   pluginSkillRoots?: string[];
   baseModelConfig?: ModelConfig;
   sandbox?: SandboxConfig;
+  vault?: VaultConfig;
+  offline?: boolean;
   /** When set, leads notify pm-agent on completion via async callback middleware */
   agentProtocolUrl?: string;
   agentProtocolHeaders?: Record<string, string>;
@@ -161,6 +163,7 @@ export async function createAgentFromSpec(
     rootDir: projectPath,
     projectPath,
     ...(options.sandbox ? { sandbox: options.sandbox } : {}),
+    ...(options.vault ? { vault: options.vault } : {}),
   });
   const platform = getPlatformPrompt(projectPath);
   const skills = (spec.primarySkills && spec.primarySkills.length > 0)
@@ -196,7 +199,7 @@ export async function createAgentFromSpec(
     createUpdateAgentMemoryTool(projectPath, spec.name),
     createUpdateProjectLogTool(projectPath),
     createRepoMapTool(projectPath),
-    createWebSearchTool(),
+    createWebSearchTool(undefined, 3, options.offline === true),
     createContextBriefingTool(projectPath),
     ...createExperienceTools(projectPath, options.baseModelConfig),
     ...createSessionStateTools(projectPath),

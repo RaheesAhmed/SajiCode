@@ -48,6 +48,20 @@ export interface PolicyConfig {
   secretsScan?: "off" | "warn" | "block";
 }
 
+export interface VaultConfig {
+  enabled?: boolean;
+  wrapper?: "op" | "doppler" | "custom";
+  /** Used when wrapper is custom — prepended to every execute() command */
+  commandPrefix?: string;
+}
+
+export interface OfflineConfig {
+  enabled?: boolean;
+  provider?: string;
+  modelName?: string;
+  baseUrl?: string;
+}
+
 export interface ProjectConfig {
   projectPath: string;
   modelConfig: ModelConfig;
@@ -56,6 +70,10 @@ export interface ProjectConfig {
   sandbox?: SandboxConfig;
   asyncSubagents?: AsyncSubagentsConfig;
   policies?: PolicyConfig;
+  vault?: VaultConfig;
+  offline?: OfflineConfig;
+  /** Remote plugin registry JSON URL (optional) */
+  pluginRegistryUrl?: string;
   riskTolerance: RiskTolerance;
   humanInTheLoop?: HumanInTheLoopConfig;
   whatsapp?: WhatsAppConfig;

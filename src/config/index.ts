@@ -3,6 +3,7 @@ import path from "path";
 import type { ModelConfig, ProjectConfig, HumanInTheLoopConfig } from "../types/index.js";
 import type { ConfigFileInput } from "./schema.js";
 import { loadLayeredConfigFile } from "./layering.js";
+import { applyOfflineMode, applyOfflineEnvironment } from "./offline.js";
 
 const DEFAULT_MODEL_CONFIG: ModelConfig = {
   provider: "ollama",
@@ -82,6 +83,11 @@ function mergeConfigFromFile(
     ...(fileConfig.sandbox ? { sandbox: fileConfig.sandbox } : {}),
     ...(fileConfig.asyncSubagents ? { asyncSubagents: fileConfig.asyncSubagents } : {}),
     ...(fileConfig.policies ? { policies: fileConfig.policies } : {}),
+    ...(fileConfig.vault ? { vault: fileConfig.vault } : {}),
+    ...(fileConfig.offline ? { offline: fileConfig.offline } : {}),
+    ...(fileConfig.pluginRegistryUrl
+      ? { pluginRegistryUrl: fileConfig.pluginRegistryUrl }
+      : {}),
     riskTolerance: fileConfig.riskTolerance ?? defaults.riskTolerance,
     humanInTheLoop: {
       ...defaults.humanInTheLoop!,
@@ -119,10 +125,25 @@ export async function loadConfig(projectPath: string): Promise<ProjectConfig> {
   if (!hasProjectLayer) {
     await ensureDefaultConfig(projectPath, defaults);
     const retry = await loadLayeredConfigFile(projectPath);
-    return mergeConfigFromFile(projectPath, defaults, retry.fileConfig);
+    return applyOfflineIfRequested(
+      mergeConfigFromFile(projectPath, defaults, retry.fileConfig),
+    );
   }
 
-  return mergeConfigFromFile(projectPath, defaults, layered.fileConfig);
+  return applyOfflineIfRequested(
+    mergeConfigFromFile(projectPath, defaults, layered.fileConfig),
+  );
+}
+
+function applyOfflineIfRequested(config: ProjectConfig): ProjectConfig {
+  if (process.env["SAJICODE_OFFLINE"] === "1" || process.env["SAJICODE_OFFLINE"] === "true") {
+    config.offline = { ...config.offline, enabled: true };
+  }
+  if (config.offline?.enabled) {
+    applyOfflineEnvironment();
+    return applyOfflineMode(config);
+  }
+  return config;
 }
 
 export async function resolveConfigForDoctor(
@@ -136,7 +157,9 @@ export async function resolveConfigForDoctor(
   );
 
   return {
-    config: mergeConfigFromFile(projectPath, defaults, layered.fileConfig),
+    config: applyOfflineIfRequested(
+      mergeConfigFromFile(projectPath, defaults, layered.fileConfig),
+    ),
     warnings: layered.warnings,
     sources,
   };

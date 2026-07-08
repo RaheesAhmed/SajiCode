@@ -24,6 +24,7 @@ import {
 import {
   discoverPlugins,
   installPluginFromPath,
+  installPluginFromNpm,
   removePlugin,
   formatPluginList,
   formatPluginConsent,
@@ -76,7 +77,8 @@ program
   .option("-m, --model <model>", "Ollama model to use", "minimax-m2.5:cloud")
   .option("-p, --path <path>", "Project directory", process.cwd())
   .option("-H, --headless", "Run in headless mode (no UI, ideal for CI/CD)", false)
-  .action(async (promptParts: string[], options: { model: string; path: string; headless: boolean }) => {
+  .option("--offline", "Air-gapped mode: Ollama only, no web search or telemetry", false)
+  .action(async (promptParts: string[], options: { model: string; path: string; headless: boolean; offline: boolean }) => {
     const {
       createSajiCode,
       runOnboarding,
@@ -95,7 +97,17 @@ program
     try {
       await ensureProjectDir(projectPath);
       setAuditProjectPath(projectPath);
-      const config = await loadConfig(projectPath);
+      let config = await loadConfig(projectPath);
+
+      if (options.offline) {
+        config = {
+          ...config,
+          offline: { ...config.offline, enabled: true },
+        };
+        const offlineMod = await import("../config/offline.js");
+        offlineMod.applyOfflineEnvironment();
+        config = offlineMod.applyOfflineMode(config);
+      }
 
       if (options.model !== "minimax-m2.5:cloud") {
         config.modelConfig.modelName = options.model;
@@ -582,6 +594,59 @@ pluginCmd
   });
 
 pluginCmd
+  .command("install")
+  .description("Install a plugin from the registry or npm package name")
+  .argument("<name>", "Registry name or npm package (e.g. sajicode-plugin-stripe)")
+  .option("-p, --path <path>", "Project directory", process.cwd())
+  .option("--user", "Install to ~/.sajicode/plugins instead of project", false)
+  .option("-y, --yes", "Skip consent summary", false)
+  .action(async (name: string, options: { path: string; user: boolean; yes: boolean }) => {
+    const layer = options.user ? "user" : "project";
+    const config = await loadConfig(options.path);
+    const {
+      fetchPluginRegistry,
+      resolveRegistryEntry,
+    } = await import("../plugins/registry-index.js");
+
+    const entries = await fetchPluginRegistry(config.pluginRegistryUrl);
+    const entry = resolveRegistryEntry(entries, name);
+    const packageName = entry?.npm ?? name;
+
+    if (entry && !options.yes) {
+      console.log(
+        chalk.yellow(
+          `Installing ${entry.name}@${entry.version} from npm (${packageName})\n${entry.description}`,
+        ),
+      );
+    }
+
+    try {
+      const dest = await installPluginFromNpm(packageName, layer, options.path);
+      console.log(chalk.green(`Installed plugin to ${dest}`));
+    } catch (error) {
+      console.error(chalk.red("Plugin install failed:"), error);
+      process.exit(1);
+    }
+  });
+
+pluginCmd
+  .command("search")
+  .description("Search the plugin registry")
+  .argument("[query]", "Search term")
+  .option("-p, --path <path>", "Project directory", process.cwd())
+  .action(async (query: string | undefined, options: { path: string }) => {
+    const config = await loadConfig(options.path);
+    const {
+      fetchPluginRegistry,
+      searchRegistry,
+      formatRegistryResults,
+    } = await import("../plugins/registry-index.js");
+    const entries = await fetchPluginRegistry(config.pluginRegistryUrl);
+    const results = searchRegistry(entries, query ?? "");
+    console.log(chalk.cyan(formatRegistryResults(results)));
+  });
+
+pluginCmd
   .command("remove")
   .description("Remove an installed plugin")
   .argument("<name>", "Plugin name")
@@ -717,12 +782,33 @@ program
   .option("--port <port>", "HTTP port", "3920")
   .option("--host <host>", "Bind address", "127.0.0.1")
   .option("--whatsapp", "Attach WhatsApp channel when enabled in config", false)
-  .action(async (options: { path: string; port: string; host: string; whatsapp: boolean }) => {
+  .option("--telegram", "Attach Telegram bot (TELEGRAM_BOT_TOKEN env)", false)
+  .option("--slack", "Attach Slack events (SLACK_BOT_TOKEN + SLACK_SIGNING_SECRET env)", false)
+  .option("--offline", "Air-gapped mode: Ollama only, no web search or telemetry", false)
+  .action(async (options: {
+    path: string;
+    port: string;
+    host: string;
+    whatsapp: boolean;
+    telegram: boolean;
+    slack: boolean;
+    offline: boolean;
+  }) => {
     const { startServeServer } = await import("../server/index.js");
     const projectPath = path.resolve(options.path);
     await ensureProjectDir(projectPath);
-    const config = await loadConfig(projectPath);
+    let config = await loadConfig(projectPath);
     config.projectPath = projectPath;
+
+    if (options.offline) {
+      config = {
+        ...config,
+        offline: { ...config.offline, enabled: true },
+      };
+      const offlineMod = await import("../config/offline.js");
+      offlineMod.applyOfflineEnvironment();
+      config = offlineMod.applyOfflineMode(config);
+    }
 
     const onboardingResult = {
       experienceLevel: "expert" as const,
@@ -739,6 +825,8 @@ program
       port: Number.parseInt(options.port, 10) || 3920,
       host: options.host,
       enableWhatsApp: options.whatsapp,
+      enableTelegram: options.telegram,
+      enableSlack: options.slack,
     });
 
     const shutdown = async () => {
@@ -749,6 +837,29 @@ program
 
     process.on("SIGINT", () => void shutdown());
     process.on("SIGTERM", () => void shutdown());
+  });
+
+program
+  .command("sbom")
+  .description("Generate CycloneDX SBOM for the project")
+  .option("-p, --path <path>", "Project directory", process.cwd())
+  .option("-o, --output <file>", "Output path (default: .sajicode/sbom.json)")
+  .option("--provenance", "Also print release provenance checklist", false)
+  .action(async (options: { path: string; output?: string; provenance: boolean }) => {
+    const { generateSbom, formatProvenanceReport } = await import("../compliance/sbom.js");
+    try {
+      const out = await generateSbom({
+        projectPath: options.path,
+        ...(options.output ? { outputPath: options.output } : {}),
+      });
+      console.log(chalk.green(`SBOM written to ${out}`));
+      if (options.provenance) {
+        console.log(chalk.cyan("\n" + (await formatProvenanceReport(options.path))));
+      }
+    } catch (error) {
+      console.error(chalk.red("SBOM generation failed:"), error);
+      process.exit(1);
+    }
   });
 
 program

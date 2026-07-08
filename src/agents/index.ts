@@ -28,6 +28,7 @@ import { contextGuardMiddleware, setAuditProjectPath } from "./context-guard.js"
 import { hookMiddleware } from "./hook-middleware.js";
 import { policyMiddleware, setPolicyContext } from "../policy/middleware.js";
 import { resolvePolicies } from "../policy/loader.js";
+import { isOfflineMode } from "../config/offline.js";
 import { setHookContext, emitHookAsync } from "../hooks/hook-engine.js";
 import {
   toolRetryMiddleware,
@@ -165,6 +166,8 @@ export async function createSajiCode(
     pluginSkillRoots: pluginContributions.skillRoots,
     baseModelConfig: config.modelConfig,
     sandbox: config.sandbox,
+    vault: config.vault,
+    offline: isOfflineMode(config),
     ...(agentProtocolUrl
       ? {
           agentProtocolUrl,
@@ -182,6 +185,7 @@ export async function createSajiCode(
       baseModelConfig: config.modelConfig,
       modelRouting: config.modelRouting,
       sessionId: threadId,
+      offline: isOfflineMode(config),
       ...(config.budget ? { budget: config.budget } : {}),
     },
     pluginContributions.agentSpecPaths,
@@ -225,10 +229,13 @@ export async function createSajiCode(
   const teamContextTools = createTeamContextTools(config.projectPath);
 
   // Build the shell backend for the PM agent
+  const offline = isOfflineMode(config);
+
   const shellBackend = createShellBackend({
     rootDir: config.projectPath,
     projectPath: config.projectPath,
     ...(config.sandbox ? { sandbox: config.sandbox } : {}),
+    ...(config.vault ? { vault: config.vault } : {}),
   });
   const executeTool = createExecuteTool(shellBackend);
 
@@ -251,7 +258,7 @@ export async function createSajiCode(
       executeTool,
       ...contextTools,
       repoMapTool,
-      createWebSearchTool(),
+      createWebSearchTool(undefined, 3, offline),
       contextBriefingTool,
       ...experienceTools,
       ...sessionStateTools,
@@ -338,9 +345,11 @@ export async function createInitAgent(
     rootDir: config.projectPath,
     projectPath: config.projectPath,
     ...(config.sandbox ? { sandbox: config.sandbox } : {}),
+    ...(config.vault ? { vault: config.vault } : {}),
   });
 
   const checkpointer = await getCheckpointer(config.projectPath);
+  const offline = isOfflineMode(config);
   const contextTools = createContextTools(config.projectPath);
   const repoMapTool = createRepoMapTool(config.projectPath);
 
@@ -353,7 +362,7 @@ export async function createInitAgent(
     skills: getAllSkillPaths(config.projectPath, pluginContributions.skillRoots) as any,
     systemPrompt: INIT_SYSTEM_PROMPT,
     backend,
-    tools: [...contextTools, repoMapTool, createWebSearchTool()] as any,
+    tools: [...contextTools, repoMapTool, createWebSearchTool(undefined, 3, offline)] as any,
     checkpointer,
   });
 

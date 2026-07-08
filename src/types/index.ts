@@ -5,6 +5,8 @@ export {
   type SandboxConfig,
   type AsyncSubagentsConfig,
   type PolicyConfig,
+  type VaultConfig,
+  type OfflineConfig,
   type ProjectConfig,
   type ExperienceLevel,
   type OnboardingResult,

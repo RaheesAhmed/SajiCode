@@ -136,6 +136,8 @@ export async function createAllRegisteredAgents(
     pluginSkillRoots: options.pluginSkillRoots,
     baseModelConfig: options.baseModelConfig,
     sandbox: options.sandbox,
+    ...(options.vault ? { vault: options.vault } : {}),
+    ...(options.offline != null ? { offline: options.offline } : {}),
     ...(options.agentProtocolUrl ? { agentProtocolUrl: options.agentProtocolUrl } : {}),
     ...(options.agentProtocolHeaders
       ? { agentProtocolHeaders: options.agentProtocolHeaders }

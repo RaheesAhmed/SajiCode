@@ -2,6 +2,7 @@ export {
   discoverPlugins,
   loadPluginContributions,
   installPluginFromPath,
+  installPluginFromNpm,
   removePlugin,
   formatPluginList,
   formatPluginConsent,

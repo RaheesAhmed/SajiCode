@@ -7,20 +7,24 @@ import type { ToolRuntime } from "@langchain/core/tools";
 import chalk from "chalk";
 import { ProcessStateManager } from "./process-state.js";
 import { checkCommandSecurity, formatSecurityResult, type CommandContext } from "./security-checks.js";
+import type { VaultConfig } from "../types/index.js";
+import { wrapCommandWithVault } from "../secrets/vault.js";
 
 export class SafeShellBackend extends LocalShellBackend {
   private readonly stateManager: ProcessStateManager;
   private readonly projectPath: string;
+  private readonly vault?: VaultConfig;
   private stateLoaded = false;
   private recentCommands: string[] = [];
 
-  constructor(options: LocalShellBackendOptions & { projectPath: string }) {
+  constructor(options: LocalShellBackendOptions & { projectPath: string; vault?: VaultConfig }) {
     super({
       ...options,
       timeout: options.timeout ?? 300,
       inheritEnv: true,
     });
     this.projectPath = options.projectPath;
+    this.vault = options.vault;
     this.stateManager = new ProcessStateManager(options.projectPath);
   }
 
@@ -159,7 +163,8 @@ export class SafeShellBackend extends LocalShellBackend {
 
     // Execute command with real-time streaming output
     console.log(chalk.gray(`  ▶ [PROCESS STATE] Executing: ${command}`));
-    const result = await this.spawnExecute(command);
+    const wrappedCommand = wrapCommandWithVault(command, this.vault);
+    const result = await this.spawnExecute(wrappedCommand);
 
     // Record command execution
     const status = result.exitCode === 0 ? "completed" as const : "failed" as const;

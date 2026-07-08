@@ -89,6 +89,19 @@ const policyConfigSchema = z.object({
   secretsScan: z.enum(["off", "warn", "block"]).optional(),
 });
 
+const vaultConfigSchema = z.object({
+  enabled: z.boolean().optional(),
+  wrapper: z.enum(["op", "doppler", "custom"]).optional(),
+  commandPrefix: z.string().optional(),
+});
+
+const offlineConfigSchema = z.object({
+  enabled: z.boolean().optional(),
+  provider: z.string().optional(),
+  modelName: z.string().optional(),
+  baseUrl: z.string().optional(),
+});
+
 const hooksSchema = z.object({
   sessionStart: hookEventSchema.optional(),
   sessionEnd: hookEventSchema.optional(),
@@ -115,6 +128,9 @@ const KNOWN_CONFIG_KEYS = new Set([
   "sandbox",
   "asyncSubagents",
   "policies",
+  "vault",
+  "offline",
+  "pluginRegistryUrl",
   "riskTolerance",
   "humanInTheLoop",
   "whatsapp",
@@ -130,6 +146,9 @@ export const configFileSchema = z.object({
   sandbox: sandboxSchema.optional(),
   asyncSubagents: asyncSubagentsSchema.optional(),
   policies: policyConfigSchema.optional(),
+  vault: vaultConfigSchema.optional(),
+  offline: offlineConfigSchema.optional(),
+  pluginRegistryUrl: z.string().url().optional(),
   riskTolerance: riskToleranceSchema.optional(),
   humanInTheLoop: humanInTheLoopSchema.optional(),
   whatsapp: whatsAppSchema.optional(),

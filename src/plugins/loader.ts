@@ -1,8 +1,12 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { parsePluginManifest, type PluginManifest } from "./manifest.js";
 import type { MCPServerConfig } from "../mcp/config.js";
+
+const execFileAsync = promisify(execFile);
 
 export type PluginLayer = "user" | "project";
 
@@ -158,6 +162,70 @@ export async function installPluginFromPath(
   await fs.cp(resolved, dest, { recursive: true, force: true });
 
   return dest;
+}
+
+function resolveNpmPackageDir(installRoot: string, packageName: string): string {
+  if (packageName.startsWith("@")) {
+    const [scope, name] = packageName.split("/");
+    return path.join(installRoot, "node_modules", scope!, name!);
+  }
+  return path.join(installRoot, "node_modules", packageName);
+}
+
+async function findPluginRoot(packageDir: string): Promise<string | null> {
+  const direct = path.join(packageDir, "plugin.json");
+  try {
+    await fs.access(direct);
+    return packageDir;
+  } catch {
+    // fall through
+  }
+
+  try {
+    const entries = await fs.readdir(packageDir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const nested = path.join(packageDir, entry.name, "plugin.json");
+      try {
+        await fs.access(nested);
+        return path.join(packageDir, entry.name);
+      } catch {
+        // continue
+      }
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
+export async function installPluginFromNpm(
+  packageName: string,
+  targetLayer: PluginLayer,
+  projectPath: string,
+): Promise<string> {
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "sajicode-plugin-"));
+
+  try {
+    await execFileAsync(
+      "npm",
+      ["install", packageName, "--no-save", "--ignore-scripts", "--prefix", tmpDir],
+      { timeout: 180_000, maxBuffer: 8 * 1024 * 1024 },
+    );
+
+    const packageDir = resolveNpmPackageDir(tmpDir, packageName);
+    const pluginRoot = await findPluginRoot(packageDir);
+    if (!pluginRoot) {
+      throw new Error(
+        `Package "${packageName}" has no plugin.json — not a SajiCode plugin`,
+      );
+    }
+
+    return installPluginFromPath(pluginRoot, targetLayer, projectPath);
+  } finally {
+    await fs.rm(tmpDir, { recursive: true, force: true }).catch(() => undefined);
+  }
 }
 
 export async function removePlugin(
