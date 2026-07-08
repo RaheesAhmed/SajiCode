@@ -545,8 +545,21 @@ const CLI_SUBCOMMANDS = new Set([
   "plugin",
 ]);
 
-const subcommand = process.argv[2];
+/** Strip Node/npm `--` separator so `node dist/index.js -- mcp list` works. */
+function normalizeCliArgv(argv: string[]): string[] {
+  const args = [...argv];
+  while (args[0] === "--") {
+    args.shift();
+  }
+  return args;
+}
+
+const cliArgs = normalizeCliArgv(process.argv.slice(2));
+const subcommand = cliArgs[0];
+
 if (subcommand && CLI_SUBCOMMANDS.has(subcommand)) {
+  // Commander reads process.argv — rewrite it without the `--` separator.
+  process.argv = [process.argv[0]!, process.argv[1]!, ...cliArgs];
   await import("./cli/index.js");
 } else {
   main().catch((error) => {
