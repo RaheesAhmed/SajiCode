@@ -64,20 +64,36 @@ function buildSystemPrompt(json: AgentSpecJson): string {
 
 // ── Spec file loading ─────────────────────────────────────────────────────────
 
-export async function loadAllSpecs(): Promise<AgentSpecJson[]> {
+async function loadSpecsFromDir(dir: string): Promise<AgentSpecJson[]> {
   try {
-    const files = await readdir(SPECS_DIR);
+    const files = await readdir(dir);
     const jsonFiles = files.filter((f) => f.endsWith(".json"));
-    const specs = await Promise.all(
+    return Promise.all(
       jsonFiles.map(async (f) => {
-        const content = await readFile(path.join(SPECS_DIR, f), "utf-8");
+        const content = await readFile(path.join(dir, f), "utf-8");
         return JSON.parse(content) as AgentSpecJson;
       }),
     );
-    return specs.sort((a, b) => a.name.localeCompare(b.name));
   } catch {
     return [];
   }
+}
+
+export async function loadAllSpecs(extraSpecDirs: string[] = []): Promise<AgentSpecJson[]> {
+  const allSpecs: AgentSpecJson[] = [];
+
+  for (const dir of extraSpecDirs) {
+    allSpecs.push(...(await loadSpecsFromDir(dir)));
+  }
+
+  allSpecs.push(...(await loadSpecsFromDir(SPECS_DIR)));
+
+  const byName = new Map<string, AgentSpecJson>();
+  for (const spec of allSpecs) {
+    byName.set(spec.name, spec);
+  }
+
+  return Array.from(byName.values()).sort((a, b) => a.name.localeCompare(b.name));
 }
 
 function jsonToAgentSpec(json: AgentSpecJson): AgentSpec {
@@ -103,12 +119,13 @@ export async function createAllRegisteredAgents(
   model: BaseChatModel,
   projectPath: string,
   factoryOptions: AgentFactoryOptions = {},
+  extraSpecDirs: string[] = [],
 ): Promise<CompiledSubAgent[]> {
-  const jsonSpecs = await loadAllSpecs();
+  const jsonSpecs = await loadAllSpecs(extraSpecDirs);
 
   if (jsonSpecs.length > 0) {
     return Promise.all(
-      jsonSpecs.map((json) =>
+      jsonSpecs.map(async (json) =>
         createAgentFromSpec(jsonToAgentSpec(json), model, projectPath, factoryOptions),
       ),
     );
@@ -116,7 +133,7 @@ export async function createAllRegisteredAgents(
 
   // Fallback to hardcoded presets
   return Promise.all(
-    Object.values(AGENT_PRESETS).map((spec) =>
+    Object.values(AGENT_PRESETS).map(async (spec) =>
       createAgentFromSpec(spec, model, projectPath, factoryOptions),
     ),
   );

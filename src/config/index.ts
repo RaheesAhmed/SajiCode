@@ -1,11 +1,8 @@
 import fs from "fs/promises";
 import path from "path";
 import type { ModelConfig, ProjectConfig, HumanInTheLoopConfig } from "../types/index.js";
-import {
-  safeParseConfigFile,
-  findUnknownConfigKeys,
-  type ConfigFileInput,
-} from "./schema.js";
+import type { ConfigFileInput } from "./schema.js";
+import { loadLayeredConfigFile } from "./layering.js";
 
 const DEFAULT_MODEL_CONFIG: ModelConfig = {
   provider: "ollama",
@@ -104,63 +101,40 @@ function mergeConfigFromFile(
 }
 
 export async function loadConfig(projectPath: string): Promise<ProjectConfig> {
-  const configPath = path.join(projectPath, CONFIG_DIR, CONFIG_FILE);
   const defaults = getDefaultConfig(projectPath);
+  const layered = await loadLayeredConfigFile(projectPath);
 
-  try {
-    const rawText = await fs.readFile(configPath, "utf-8");
-    const rawJson = JSON.parse(rawText) as Record<string, unknown>;
-    const parsed = safeParseConfigFile(rawJson);
-
-    if (!parsed.success) {
-      console.warn(parsed.error);
-      return defaults;
+  for (const warning of layered.warnings) {
+    if (!warning.includes("No project config")) {
+      console.warn(warning);
     }
-
-    const unknownKeys = findUnknownConfigKeys(rawJson);
-    if (unknownKeys.length > 0) {
-      console.warn(
-        `Unknown keys in .sajicode/config.json (ignored): ${unknownKeys.join(", ")}`,
-      );
-    }
-
-    return mergeConfigFromFile(projectPath, defaults, parsed.data);
-  } catch {
-    await ensureDefaultConfig(projectPath, defaults);
-    return defaults;
   }
+
+  const hasProjectLayer = layered.sources.some((s) => s.layer === "project");
+  if (!hasProjectLayer) {
+    await ensureDefaultConfig(projectPath, defaults);
+    const retry = await loadLayeredConfigFile(projectPath);
+    return mergeConfigFromFile(projectPath, defaults, retry.fileConfig);
+  }
+
+  return mergeConfigFromFile(projectPath, defaults, layered.fileConfig);
 }
 
 export async function resolveConfigForDoctor(
   projectPath: string,
-): Promise<{ config: ProjectConfig; warnings: string[] }> {
-  const configPath = path.join(projectPath, CONFIG_DIR, CONFIG_FILE);
+): Promise<{ config: ProjectConfig; warnings: string[]; sources: string[] }> {
   const defaults = getDefaultConfig(projectPath);
-  const warnings: string[] = [];
+  const layered = await loadLayeredConfigFile(projectPath);
 
-  try {
-    const rawText = await fs.readFile(configPath, "utf-8");
-    const rawJson = JSON.parse(rawText) as Record<string, unknown>;
-    const parsed = safeParseConfigFile(rawJson);
+  const sources = layered.sources.map((s) =>
+    s.path ? `${s.layer} (${s.path})` : s.layer,
+  );
 
-    if (!parsed.success) {
-      warnings.push(parsed.error);
-      return { config: defaults, warnings };
-    }
-
-    const unknownKeys = findUnknownConfigKeys(rawJson);
-    if (unknownKeys.length > 0) {
-      warnings.push(`Unknown keys ignored: ${unknownKeys.join(", ")}`);
-    }
-
-    return {
-      config: mergeConfigFromFile(projectPath, defaults, parsed.data),
-      warnings,
-    };
-  } catch (error) {
-    warnings.push(`No config file at ${configPath} — using defaults`);
-    return { config: defaults, warnings };
-  }
+  return {
+    config: mergeConfigFromFile(projectPath, defaults, layered.fileConfig),
+    warnings: layered.warnings,
+    sources,
+  };
 }
 
 async function ensureDefaultConfig(

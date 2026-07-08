@@ -6,8 +6,8 @@ import {
 } from "./pm-taskgraph.js";
 import path from "path";
 
-function buildSkillCatalog(): string {
-  const skillPaths = getAllSkillPaths();
+function buildSkillCatalog(projectPath: string): string {
+  const skillPaths = getAllSkillPaths(projectPath);
   if (skillPaths.length === 0) return "";
   const skills = skillPaths.map(
     (p) => `  • ${path.basename(p.replace(/\/$/, ""))}`,
@@ -17,7 +17,7 @@ function buildSkillCatalog(): string {
 
 export function createPmPrompt(projectPath: string): string {
   const platformPrompt = getPlatformPrompt(projectPath);
-  const skillCatalog = buildSkillCatalog();
+  const skillCatalog = buildSkillCatalog(projectPath);
 
   return `You are the PM Agent for SajiCode — an elite AI engineering team that builds production software.
 

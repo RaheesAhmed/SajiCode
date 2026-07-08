@@ -31,10 +31,43 @@ const whatsAppSchema = z.object({
   personalBotPrompt: z.string().optional(),
 });
 
+const hookMatcherSchema = z.object({
+  toolName: z.string().optional(),
+  argsPattern: z.string().optional(),
+  paths: z.array(z.string()).optional(),
+  status: z.string().optional(),
+  agentName: z.string().optional(),
+});
+
+const hookDefinitionSchema = z.object({
+  matcher: hookMatcherSchema.optional(),
+  command: z.string(),
+  blocking: z.boolean().optional(),
+  timeout: z.number().int().positive().optional(),
+});
+
+const hookEventSchema = z.union([
+  z.string(),
+  hookDefinitionSchema,
+  z.array(z.union([z.string(), hookDefinitionSchema])),
+]);
+
 const hooksSchema = z.object({
-  preTask: z.string().optional(),
-  postTask: z.string().optional(),
-  onExit: z.string().optional(),
+  sessionStart: hookEventSchema.optional(),
+  sessionEnd: hookEventSchema.optional(),
+  preTask: hookEventSchema.optional(),
+  postTask: hookEventSchema.optional(),
+  onExit: hookEventSchema.optional(),
+  preToolUse: hookEventSchema.optional(),
+  postToolUse: hookEventSchema.optional(),
+  preFileWrite: hookEventSchema.optional(),
+  postFileWrite: hookEventSchema.optional(),
+  preShell: hookEventSchema.optional(),
+  preCommit: hookEventSchema.optional(),
+  agentDispatch: hookEventSchema.optional(),
+  agentComplete: hookEventSchema.optional(),
+  buildResult: hookEventSchema.optional(),
+  notification: hookEventSchema.optional(),
 });
 
 const KNOWN_CONFIG_KEYS = new Set([

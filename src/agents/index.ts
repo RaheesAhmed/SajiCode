@@ -12,11 +12,14 @@ import { createAllDomainHeads } from "./domain-heads.js";
 import { loadAllSpecs, createAgentRegistryTools } from "./agent-registry.js";
 import { createModel } from "../llms/provider.js";
 import { getAllSkillPaths } from "../utils/skills.js";
+import { loadPluginContributions } from "../plugins/registry.js";
 import { MCPClientManager } from "../mcp/MCPClient.js";
 import { createContextBriefingTool } from "../tools/context-briefing.js";
 import { createExperienceTools } from "../tools/experience-tools.js";
 import { createSessionStateTools } from "../memory/session-state.js";
 import { contextGuardMiddleware, setAuditProjectPath } from "./context-guard.js";
+import { hookMiddleware } from "./hook-middleware.js";
+import { setHookContext, emitHookAsync } from "../hooks/hook-engine.js";
 import {
   toolRetryMiddleware,
   modelRetryMiddleware,
@@ -67,7 +70,16 @@ export async function createSajiCode(
   const { config, onboardingResult, threadId } = options;
 
   setAuditProjectPath(config.projectPath);
+  setHookContext({
+    projectPath: config.projectPath,
+    hooks: config.hooks,
+    defaultAgentName: "pm-agent",
+  });
   await saveCurrentThread(config.projectPath, threadId);
+  emitHookAsync("sessionStart", {
+    sessionId: threadId,
+    projectPath: config.projectPath,
+  });
 
   const model = await createModel(config.modelConfig);
 
@@ -93,17 +105,28 @@ export async function createSajiCode(
   const contextTools = createContextTools(config.projectPath);
   const repoMapTool = createRepoMapTool(config.projectPath);
 
+  const pluginContributions = await loadPluginContributions(config.projectPath);
+
   const mcpClient = new MCPClientManager(config.projectPath);
+  mcpClient.addServerConfigs(pluginContributions.mcpServers);
   await mcpClient.initialize();
-  const mcpTools = await mcpClient.getTools();
+  const mcpTools = await mcpClient.getToolsForAgent("pm-agent");
 
   await ensureSajiCodeDir(config.projectPath);
 
-  const domainHeads = await createAllDomainHeads(model, config.projectPath, {
-    mcpTools,
+  const factoryOptions = {
+    mcpClient,
     checkpointer,
-  });
-  const agentSpecs = await loadAllSpecs();
+    pluginSkillRoots: pluginContributions.skillRoots,
+  };
+
+  const domainHeads = await createAllDomainHeads(
+    model,
+    config.projectPath,
+    factoryOptions,
+    pluginContributions.agentSpecPaths,
+  );
+  const agentSpecs = await loadAllSpecs(pluginContributions.agentSpecPaths);
   const registryTools = createAgentRegistryTools(agentSpecs);
   const interruptOn = buildInterruptOn(config.humanInTheLoop);
 
@@ -182,10 +205,11 @@ export async function createSajiCode(
       toolRetryMiddleware({ maxRetries: 2, initialDelayMs: 500, onFailure: "continue" }),
       // Business logic guards (innermost — run closest to the actual tool calls)
       judgmentMiddleware,
+      hookMiddleware,
       contextGuardMiddleware,
     ] as any,
     checkpointer,
-    skills: getAllSkillPaths() as any,
+    skills: getAllSkillPaths(config.projectPath, pluginContributions.skillRoots) as any,
     ...(interruptOn ? { interruptOn } : {}),
   } as any);
 
@@ -216,11 +240,12 @@ export async function createInitAgent(
   const repoMapTool = createRepoMapTool(config.projectPath);
 
   await ensureSajiCodeDir(config.projectPath);
+  const pluginContributions = await loadPluginContributions(config.projectPath);
 
   const agent = await createDeepAgent({
     name: "init-agent",
     model,
-    skills: getAllSkillPaths() as any,
+    skills: getAllSkillPaths(config.projectPath, pluginContributions.skillRoots) as any,
     systemPrompt: INIT_SYSTEM_PROMPT,
     backend,
     tools: [...contextTools, repoMapTool, createWebSearchTool()] as any,

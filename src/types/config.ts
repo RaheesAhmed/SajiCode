@@ -59,9 +59,21 @@ export interface WhatsAppConfig {
 }
 
 export interface HooksConfig {
-  preTask?: string;
-  postTask?: string;
-  onExit?: string;
+  sessionStart?: import("../hooks/types.js").HookEventConfig;
+  sessionEnd?: import("../hooks/types.js").HookEventConfig;
+  preTask?: import("../hooks/types.js").HookEventConfig;
+  postTask?: import("../hooks/types.js").HookEventConfig;
+  onExit?: import("../hooks/types.js").HookEventConfig;
+  preToolUse?: import("../hooks/types.js").HookEventConfig;
+  postToolUse?: import("../hooks/types.js").HookEventConfig;
+  preFileWrite?: import("../hooks/types.js").HookEventConfig;
+  postFileWrite?: import("../hooks/types.js").HookEventConfig;
+  preShell?: import("../hooks/types.js").HookEventConfig;
+  preCommit?: import("../hooks/types.js").HookEventConfig;
+  agentDispatch?: import("../hooks/types.js").HookEventConfig;
+  agentComplete?: import("../hooks/types.js").HookEventConfig;
+  buildResult?: import("../hooks/types.js").HookEventConfig;
+  notification?: import("../hooks/types.js").HookEventConfig;
 }
 
 export enum AgentRole {

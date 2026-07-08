@@ -24,6 +24,7 @@ import { createRepoMapTool } from "../tools/repo-map.js";
 import { createWebSearchTool } from "../tools/web-search.js";
 import { leadJudgmentMiddleware } from "./judgment.js";
 import { contextGuardMiddleware } from "./context-guard.js";
+import { hookMiddleware } from "./hook-middleware.js";
 import { createContextBriefingTool } from "../tools/context-briefing.js";
 import { createExperienceTools } from "../tools/experience-tools.js";
 import { createSessionStateTools } from "../memory/session-state.js";
@@ -43,6 +44,7 @@ import { createProjectDnaTools } from "../memory/project-dna.js";
 import { createPatternTools } from "../memory/pattern-library.js";
 import { createStandupTools } from "../tools/standup.js";
 import type { ProjectCheckpointer } from "../memory/checkpointer.js";
+import type { MCPClientManager } from "../mcp/MCPClient.js";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -130,8 +132,10 @@ ${lines}
 // ── Core factory ───────────────────────────────────────────────────────────────
 
 export interface AgentFactoryOptions {
+  mcpClient?: MCPClientManager;
   mcpTools?: any[];
   checkpointer?: ProjectCheckpointer;
+  pluginSkillRoots?: string[];
 }
 
 export async function createAgentFromSpec(
@@ -143,8 +147,8 @@ export async function createAgentFromSpec(
   const backend = new SafeShellBackend({ rootDir: projectPath, projectPath });
   const platform = getPlatformPrompt(projectPath);
   const skills = (spec.primarySkills && spec.primarySkills.length > 0)
-    ? getSkillPaths(spec.primarySkills) as any
-    : getAllSkillPaths() as any;
+    ? getSkillPaths(spec.primarySkills, projectPath, options.pluginSkillRoots) as any
+    : getAllSkillPaths(projectPath, options.pluginSkillRoots) as any;
 
   await ensureAgentMemoryDir(projectPath);
   await initAgentMemoryFile(
@@ -167,7 +171,9 @@ export async function createAgentFromSpec(
     .filter(Boolean)
     .join("\n");
 
-  const mcpTools = options.mcpTools ?? [];
+  const mcpTools = options.mcpClient
+    ? await options.mcpClient.getToolsForAgent(spec.name)
+    : (options.mcpTools ?? []);
 
   const tools = [
     createUpdateAgentMemoryTool(projectPath, spec.name),
@@ -213,6 +219,7 @@ export async function createAgentFromSpec(
       toolRetryMiddleware({ maxRetries: 2, initialDelayMs: 500, onFailure: "continue" }),
       // Business logic: enforcement guards (innermost — run closest to tool calls)
       leadJudgmentMiddleware,
+      hookMiddleware,
       contextGuardMiddleware,
     ] as any,
   });

@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 
+import fs from "node:fs/promises";
+import path from "node:path";
 import { Command } from "commander";
 import chalk from "chalk";
 import { loadConfig, saveConfig, ensureProjectDir, resolveConfigForDoctor } from "../config/index.js";
@@ -17,6 +19,29 @@ import { StreamRenderer } from "./renderer.js";
 import { undoFileChange, listRecentSnapshots } from "../tools/file-tracker.js";
 import { startGitSession, getSessionId, createGitSessionTools } from "../tools/git-session.js";
 import { generateStandupBriefing } from "../tools/standup.js";
+import {
+  listSkillsForDisplay,
+  scaffoldSkill,
+  addSkillFromPath,
+  lintSkills,
+  formatLintResults,
+} from "../skills/manager.js";
+import {
+  loadMcpConfigFile,
+  saveMcpServerConfig,
+} from "../mcp/config.js";
+import {
+  testMcpServer,
+  formatMcpListReport,
+  getMcpAuthInstructions,
+} from "../mcp/health.js";
+import {
+  discoverPlugins,
+  installPluginFromPath,
+  removePlugin,
+  formatPluginList,
+  formatPluginConsent,
+} from "../plugins/registry.js";
 
 const ORANGE = chalk.hex("#FF8C00");
 const program = new Command();
@@ -386,6 +411,182 @@ program
     }
   });
 
+const mcpCmd = program
+  .command("mcp")
+  .description("Manage MCP servers (.sajicode/mcp.json)");
+
+mcpCmd
+  .command("list")
+  .description("List configured MCP servers")
+  .option("-p, --path <path>", "Project directory", process.cwd())
+  .action(async (options: { path: string }) => {
+    const { servers, error } = await loadMcpConfigFile(options.path);
+    if (error) console.log(chalk.yellow(`Warning: ${error}`));
+    console.log(chalk.cyan(formatMcpListReport(servers)));
+  });
+
+mcpCmd
+  .command("add")
+  .description("Add or update an MCP server in mcp.json")
+  .argument("<name>", "Server name")
+  .option("-p, --path <path>", "Project directory", process.cwd())
+  .option("--command <cmd>", "Stdio command")
+  .option("--args <args>", "Comma-separated args")
+  .option("--url <url>", "Remote MCP URL")
+  .option("--transport <type>", "stdio | sse | streamable_http", "stdio")
+  .option("--agents <agents>", "Comma-separated agent names")
+  .action(async (name: string, options: {
+    path: string;
+    command?: string;
+    args?: string;
+    url?: string;
+    transport: string;
+    agents?: string;
+  }) => {
+    const entry: Record<string, unknown> = {
+      transport: options.transport,
+    };
+    if (options.command) entry["command"] = options.command;
+    if (options.args) entry["args"] = options.args.split(",").map((a) => a.trim());
+    if (options.url) entry["url"] = options.url;
+    if (options.agents) entry["agents"] = options.agents.split(",").map((a) => a.trim());
+
+    const saved = await saveMcpServerConfig(options.path, name, entry);
+    console.log(chalk.green(`Saved MCP server "${name}" to ${saved}`));
+  });
+
+mcpCmd
+  .command("test")
+  .description("Test connectivity to an MCP server")
+  .argument("<name>", "Server name")
+  .option("-p, --path <path>", "Project directory", process.cwd())
+  .action(async (name: string, options: { path: string }) => {
+    console.log(chalk.gray(`Testing MCP server "${name}"...`));
+    const result = await testMcpServer(options.path, name);
+    console.log(
+      result.ok
+        ? chalk.green(`✓ ${result.message} (${result.toolCount} tools, ${result.transport})`)
+        : chalk.red(`✗ ${result.message}`),
+    );
+    if (!result.ok) process.exit(1);
+  });
+
+mcpCmd
+  .command("auth")
+  .description("Show auth setup instructions for a remote MCP server")
+  .argument("<name>", "Server name")
+  .option("-p, --path <path>", "Project directory", process.cwd())
+  .action(async (name: string, options: { path: string }) => {
+    const { servers } = await loadMcpConfigFile(options.path);
+    const server = servers.find((s) => s.name === name);
+    console.log(chalk.cyan(getMcpAuthInstructions(name, server)));
+  });
+
+const pluginCmd = program
+  .command("plugin")
+  .description("Manage SajiCode plugins");
+
+pluginCmd
+  .command("list")
+  .description("List loaded plugins and capabilities")
+  .option("-p, --path <path>", "Project directory", process.cwd())
+  .action(async (options: { path: string }) => {
+    const plugins = await discoverPlugins(options.path);
+    console.log(chalk.cyan(formatPluginList(plugins)));
+  });
+
+pluginCmd
+  .command("add")
+  .description("Install a plugin from a local folder path")
+  .argument("<source>", "Path to plugin folder containing plugin.json")
+  .option("-p, --path <path>", "Project directory", process.cwd())
+  .option("--user", "Install to ~/.sajicode/plugins instead of project", false)
+  .option("-y, --yes", "Skip consent summary", false)
+  .action(async (source: string, options: { path: string; user: boolean; yes: boolean }) => {
+    const layer = options.user ? "user" : "project";
+    const plugins = await discoverPlugins(options.path);
+    const resolved = path.resolve(source);
+    const manifestRaw = await fs.readFile(path.join(resolved, "plugin.json"), "utf-8");
+    const { parsePluginManifest } = await import("../plugins/manifest.js");
+    const manifest = parsePluginManifest(JSON.parse(manifestRaw));
+    const preview = {
+      manifest,
+      rootPath: resolved,
+      layer,
+    } as import("../plugins/loader.js").LoadedPlugin;
+
+    if (!options.yes) {
+      console.log(chalk.yellow(formatPluginConsent(preview)));
+    }
+
+    const dest = await installPluginFromPath(source, layer, options.path);
+    console.log(chalk.green(`Installed plugin to ${dest}`));
+    if (plugins.some((p) => p.manifest.name === manifest.name)) {
+      console.log(chalk.gray("Note: replaced existing plugin with the same name."));
+    }
+  });
+
+pluginCmd
+  .command("remove")
+  .description("Remove an installed plugin")
+  .argument("<name>", "Plugin name")
+  .option("-p, --path <path>", "Project directory", process.cwd())
+  .action(async (name: string, options: { path: string }) => {
+    const removed = await removePlugin(name, options.path);
+    if (removed) {
+      console.log(chalk.green(`Removed plugin "${name}"`));
+    } else {
+      console.error(chalk.red(`Plugin "${name}" not found`));
+      process.exit(1);
+    }
+  });
+
+const skillCmd = program
+  .command("skill")
+  .description("Manage agent skills (layered: project > user > bundled)");
+
+skillCmd
+  .command("list")
+  .description("List all skills and their source layer")
+  .option("-p, --path <path>", "Project directory", process.cwd())
+  .action(async (options: { path: string }) => {
+    console.log(chalk.cyan(await listSkillsForDisplay(options.path)));
+  });
+
+skillCmd
+  .command("new")
+  .description("Scaffold a new skill with valid SKILL.md frontmatter")
+  .argument("<name>", "Skill folder name")
+  .option("-p, --path <path>", "Project directory", process.cwd())
+  .option("--user", "Create in ~/.sajicode/skills instead of project", false)
+  .action(async (name: string, options: { path: string; user: boolean }) => {
+    const layer = options.user ? "user" : "project";
+    const result = await scaffoldSkill(name, layer, options.path);
+    console.log(chalk.green(result));
+  });
+
+skillCmd
+  .command("add")
+  .description("Install a skill from a local folder path")
+  .argument("<source>", "Path to skill folder containing SKILL.md")
+  .option("-p, --path <path>", "Project directory", process.cwd())
+  .option("--user", "Install to user layer instead of project", false)
+  .action(async (source: string, options: { path: string; user: boolean }) => {
+    const layer = options.user ? "user" : "project";
+    const result = await addSkillFromPath(source, layer, options.path);
+    console.log(result.startsWith("No ") ? chalk.yellow(result) : chalk.green(result));
+  });
+
+skillCmd
+  .command("lint")
+  .description("Validate skill frontmatter and structure")
+  .option("-p, --path <path>", "Project directory", process.cwd())
+  .action(async (options: { path: string }) => {
+    const results = await lintSkills(options.path);
+    console.log(chalk.cyan(formatLintResults(results)));
+    if (results.some((r) => !r.ok)) process.exit(1);
+  });
+
 program
   .command("config-doctor")
   .description("Validate .sajicode/config.json and report issues")
@@ -394,10 +595,16 @@ program
     const projectPath = options.path;
 
     try {
-      const { config, warnings } = await resolveConfigForDoctor(projectPath);
+      const { config, warnings, sources } = await resolveConfigForDoctor(projectPath);
 
       console.log(ORANGE.bold("🩺 SajiCode Config Doctor"));
       console.log(chalk.gray(`  Project: ${projectPath}\n`));
+
+      console.log(chalk.gray("  Config layers (later overrides earlier):"));
+      for (const source of sources) {
+        console.log(chalk.gray(`    • ${source}`));
+      }
+      console.log("");
 
       if (warnings.length === 0) {
         console.log(chalk.green("✅ Config is valid — no warnings"));

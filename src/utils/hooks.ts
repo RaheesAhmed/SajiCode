@@ -1,48 +1,37 @@
 import { execSync } from "node:child_process";
-import chalk from "chalk";
-import { type HooksConfig } from "../types/index.js";
+import { runLegacyHook } from "../hooks/hook-engine.js";
+import type { HooksConfig } from "../types/index.js";
 
-const CY = chalk.cyan;
-const GY = chalk.gray;
-const G = chalk.green;
-const RD = chalk.red;
-
+/**
+ * Legacy hook runner — delegates to the async hook engine.
+ * Kept for backward compatibility with existing call sites.
+ */
 export function runHook(
+  hookName: "preTask" | "postTask" | "onExit",
+  config: HooksConfig | undefined,
+  projectPath: string,
+  payload: { task?: string; summary?: string } = {},
+): void {
+  void runLegacyHook(hookName, config, projectPath, payload).catch((error) => {
+    console.error(`Hook ${hookName} failed:`, error instanceof Error ? error.message : error);
+  });
+}
+
+/** @deprecated Use hook-engine emitHook instead. Sync exec kept for scripts that import directly. */
+export function runHookSync(
   hookName: keyof HooksConfig,
   config: HooksConfig | undefined,
-  projectPath: string
+  projectPath: string,
 ): void {
   if (!config || !config[hookName]) return;
 
-  const command = config[hookName] as string;
-  console.log(`\n  ${CY("⚡")} ${GY(`Running ${hookName} hook: `)}${command}`);
+  const value = config[hookName];
+  const command = typeof value === "string" ? value : undefined;
+  if (!command) return;
 
   try {
-    const output = execSync(command, {
-      cwd: projectPath,
-      encoding: "utf-8",
-      timeout: 60_000,
-      stdio: "pipe", // Capture output so we can format it nicely
-    });
-
-    if (output.trim()) {
-      for (const line of output.trim().split("\n")) {
-        console.log(`    ${GY("│")} ${GY(line.trim())}`);
-      }
-    }
-    console.log(`    ${G("✓")} ${GY("Hook completed successfully")}\n`);
-  } catch (error: any) {
-    console.log(`    ${RD("✗")} ${RD(`Hook failed: ${error.message}`)}`);
-    if (error.stdout) {
-      for (const line of error.stdout.toString().trim().split("\n")) {
-        console.log(`    ${GY("│")} ${GY(line.trim())}`);
-      }
-    }
-    if (error.stderr) {
-      for (const line of error.stderr.toString().trim().split("\n")) {
-        console.log(`    ${GY("│")} ${RD(line.trim())}`);
-      }
-    }
-    console.log("");
+    execSync(command, { cwd: projectPath, encoding: "utf-8", timeout: 60_000, stdio: "pipe" });
+  } catch {
+    // Silent — legacy behavior
   }
 }

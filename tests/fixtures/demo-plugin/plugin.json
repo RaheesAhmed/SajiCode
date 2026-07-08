@@ -1,0 +1,11 @@
+{
+  "name": "demo-plugin",
+  "version": "1.0.0",
+  "description": "Demo plugin for tests",
+  "capabilities": ["skills"],
+  "permissions": {
+    "shell": false,
+    "filesystem": "project-only"
+  },
+  "sajicodeVersion": ">=1.2.4"
+}

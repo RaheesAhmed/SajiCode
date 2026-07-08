@@ -18,6 +18,7 @@ import { input as inquirerInput, select as inquirerSelect } from "@inquirer/prom
 import { ChannelRouter } from "./channels/router.js";
 import { WhatsAppAdapter } from "./channels/whatsapp.js";
 import { runHook } from "./utils/hooks.js";
+import { emitHookAsync } from "./hooks/hook-engine.js";
 import {
   createSessionTranscriptRecorder,
   type SessionTranscriptRecorder,
@@ -295,6 +296,7 @@ async function main(): Promise<void> {
 
     const cleanupAndExit = async (code: number) => {
       runHook("onExit", config.hooks, projectPath);
+      emitHookAsync("sessionEnd", { projectPath, sessionId: threadId });
       await mcpClient.close();
       process.exit(code);
     };
@@ -538,6 +540,9 @@ const CLI_SUBCOMMANDS = new Set([
   "revert",
   "resume",
   "config-doctor",
+  "skill",
+  "mcp",
+  "plugin",
 ]);
 
 const subcommand = process.argv[2];

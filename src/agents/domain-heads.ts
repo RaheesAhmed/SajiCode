@@ -7,6 +7,7 @@ export async function createAllDomainHeads(
   model: BaseChatModel,
   projectPath: string,
   factoryOptions: AgentFactoryOptions = {},
+  extraSpecDirs: string[] = [],
 ): Promise<CompiledSubAgent[]> {
-  return createAllRegisteredAgents(model, projectPath, factoryOptions);
+  return createAllRegisteredAgents(model, projectPath, factoryOptions, extraSpecDirs);
 }
