@@ -1,6 +1,6 @@
 # SajiCode — Complete Feature Reference
 
-> Every feature, every tool, every protocol. Updated for v1.2.3.
+> Every feature, every tool, every protocol. Updated for **v1.2.4** — autonomous engineering organism (team + daemon + Guardian + A2A).
 
 ---
 
@@ -41,12 +41,29 @@
 33. [Multi-Agent Code Search](#33-multi-agent-code-search)
 34. [Hooks System](#34-hooks-system)
 35. [Configuration Reference](#35-configuration-reference)
+36. [Tree-Sitter Code Graph](#36-tree-sitter-code-graph)
+37. [Prompt Compression](#37-prompt-compression)
+38. [Semantic Memory & Consolidation](#38-semantic-memory--consolidation)
+39. [Skill Promotion Loop](#39-skill-promotion-loop)
+40. [Daemon, Heartbeat & Task Queue](#40-daemon-heartbeat--task-queue)
+41. [Agent Handoffs & Message Bus](#41-agent-handoffs--message-bus)
+42. [Research, Debate & Consensus](#42-research-debate--consensus)
+43. [Personas & Business MCP](#43-personas--business-mcp)
+44. [Browser Tools (CDP)](#44-browser-tools-cdp)
+45. [Verification Ladder & Auto-Ship](#45-verification-ladder--auto-ship)
+46. [A2A Interoperability](#46-a2a-interoperability)
+47. [Guardian Swarm](#47-guardian-swarm)
+48. [Plugins](#48-plugins)
+49. [Observability & Cost Tracking](#49-observability--cost-tracking)
+50. [Durable Checkpointing & Resume](#50-durable-checkpointing--resume)
+51. [Eval Harness](#51-eval-harness)
+52. [SBOM](#52-sbom)
 
 ---
 
 ## 1. The Agent Team
 
-SajiCode runs **10 specialist lead agents** coordinated by a PM Agent. Each agent owns a defined territory of directories and is hard-blocked from writing outside it without PM authorization.
+SajiCode runs **17 specialist agents** under a PM coordinator: 10 domain leads, a research lead, a review gate, plus JSON-spec specialists (Next.js, Python API, AI/RAG, MCP, 3D web, performance). Each lead owns a defined territory of directories and is hard-blocked from writing outside it without PM authorization.
 
 ### PM Agent
 - Plans all work — never writes implementation files
@@ -111,6 +128,17 @@ SajiCode runs **10 specialist lead agents** coordinated by a PM Agent. Each agen
 - **Skills loaded**: `superpowers`, `architect`, `performance-optimizer`
 - **Checklist**: COMPLETENESS (no TODOs/stubs) → TYPES (no untyped `any`) → IMPORTS (no circular deps) → ARCHITECTURE (layer separation) → ERRORS (no swallowed catches) → DEAD CODE (no unused imports)
 - **Verdict**: PASS or FAIL with file path, line number, severity, and required fix for each issue
+
+### Research Lead
+- **Territory**: Read-only research (no implementation writes)
+- **Expertise**: Multi-hop cited research, technology comparisons, ADR drafts
+- **Skills loaded**: `web-research`, `architect`
+- **Standard**: Every claim cites a source URL or doc path. Outputs structured findings the PM can feed into debate / consensus.
+
+### Domain Specialists (JSON specs)
+Loaded from `src/agents/specs/*.json` and plugin agent specs:
+- `nextjs-specialist`, `python-api-specialist`, `ai-rag-specialist`
+- `mcp-specialist`, `3d-web-specialist`, `performance-specialist`
 
 ---
 
@@ -730,6 +758,9 @@ Used by `/init` to generate `SAJICODE.md` and `PROJECT.dna`.
 ### Dependency Graph Tool: `build_dependency_order`
 Given a list of planned files, returns the correct implementation order based on import relationships. Ensures types and interfaces are written before the files that import them.
 
+### Code Graph Tools (tree-sitter)
+See [§36 Tree-Sitter Code Graph](#36-tree-sitter-code-graph) — `query_code_graph`, ranked repo map, call-site retrieval with line numbers.
+
 ---
 
 ## 20. Terminal UI (React + Ink)
@@ -791,44 +822,58 @@ In headless mode:
 
 ## 22. CLI Commands
 
+No arguments → interactive REPL. Named subcommands → Commander CLI (`sajicode --help`).
+
 ### Interactive mode (default)
 ```bash
-sajicode                             # launch TUI, current directory
-sajicode -p anthropic -m claude-sonnet-4-6   # with specific model
-sajicode --channels whatsapp         # with WhatsApp channel
+sajicode                             # launch REPL, current directory
+sajicode -p anthropic -m claude-sonnet-4-6
+sajicode --channels whatsapp
 ```
 
-### Standup
+### Core
 ```bash
-sajicode standup                     # daily briefing for current directory
-sajicode standup -p /path/to/project # for a specific project
+sajicode build [prompt]              # one-shot team run
+sajicode init                        # initialize project
+sajicode status                      # team status
+sajicode standup                     # daily briefing
+sajicode resume                      # resume LangGraph checkpoint
+sajicode config                      # set model / prefs
+sajicode config-doctor               # validate .sajicode/config.json
 ```
 
-### Revert
+### Git safety
 ```bash
 sajicode revert                      # revert entire current session
-sajicode revert --agent backend-lead # revert one agent's commits
-sajicode revert --session 20260611-143022     # revert a past session
-sajicode revert -p /path/to/project  # revert in another directory
+sajicode revert --agent backend-lead
+sajicode revert --session 20260611-143022
+sajicode undo [file]                 # restore from snapshot
+sajicode snapshots                   # list snapshots
 ```
 
-### File safety
+### Autonomy
 ```bash
-sajicode undo src/api/auth.ts        # restore file from latest snapshot
-sajicode snapshots                   # list recent file snapshots
+sajicode serve                       # HTTP + channels + A2A card
+sajicode daemon start|stop|status|deploy|install
+sajicode task add|list|cancel
+sajicode fix-ci                      # failed CI log → headless fix
 ```
 
-### Project setup
+### Security & ops
 ```bash
-sajicode init                        # initialize in current directory
-sajicode audit                       # run security agent on codebase
+sajicode audit                       # security agent
+sajicode guardian scan|incidents
+sajicode eval                        # eval harness
+sajicode sbom                        # CycloneDX SBOM
+sajicode costs                       # usage / cost report
 ```
 
-### Configuration
+### Extensibility
 ```bash
-sajicode config -m claude-sonnet-4-6         # set default model
-sajicode config --base-url http://localhost:11434  # set Ollama URL
-sajicode config --risk low           # set risk tolerance
+sajicode skill list|new|add|lint
+sajicode mcp list|add|test|auth
+sajicode plugin list|add|install|search|remove
+sajicode persona list|set|business-mcp
 ```
 
 ### Headless
@@ -837,12 +882,12 @@ sajicode build "your task" --headless
 sajicode build "your task" -H -p anthropic -m claude-opus-4
 ```
 
-### In-session commands (TUI)
+### In-session commands (REPL)
 | Command | What it does |
 |:--|:--|
 | `/init` | Scan project → generate `SAJICODE.md` and `PROJECT.dna` |
 | `/status` | Show model, thread, context, and approval status |
-| `/help` | Show command list |
+| `/help` | REPL commands + CLI command list |
 | `/clear` | Clear the terminal |
 | `/exit` | Quit SajiCode |
 
@@ -1179,6 +1224,12 @@ Run custom shell commands at key lifecycle events.
     "modelName": "claude-sonnet-4-6",
     "baseUrl": "http://localhost:11434"
   },
+  "modelRouting": {
+    "planner": "claude-sonnet-4-6",
+    "leads": "claude-haiku-4-5",
+    "cheap": "gpt-4o-mini",
+    "fallback": "gpt-4o-mini"
+  },
   "riskTolerance": "medium",
   "humanInTheLoop": {
     "enabled": false,
@@ -1188,6 +1239,26 @@ Run custom shell commands at key lifecycle events.
       }
     },
     "allowedCommands": ["npm run", "node ", "mkdir", "npx tsc"]
+  },
+  "budget": {
+    "perSession": 10,
+    "action": "warn"
+  },
+  "compression": {
+    "enabled": false
+  },
+  "codeGraph": {
+    "enabled": true
+  },
+  "asyncSubagents": {
+    "enabled": true
+  },
+  "a2a": {
+    "enabled": true,
+    "publicUrl": "http://localhost:3847"
+  },
+  "guardian": {
+    "enabled": true
   },
   "whatsapp": {
     "enabled": false,
@@ -1202,31 +1273,352 @@ Run custom shell commands at key lifecycle events.
 }
 ```
 
+Validate with:
+
+```bash
+sajicode config-doctor
+```
+
 ### Memory layout (`.sajicode/`)
 
 ```
 .sajicode/
 ├── config.json               ← project configuration
-├── PROJECT.dna               ← persistent project brain (9 sections)
+├── mcp.json                  ← MCP server definitions
+├── persona.md                ← active SOUL.md-style persona
+├── PROJECT.dna               ← persistent project brain
 ├── SAJICODE.md               ← project context for agents
+├── HEARTBEAT.md              ← daemon checklist (optional)
 ├── active_context.md         ← current session context
 ├── Plan.md                   ← current task plan
 ├── Architecture.md           ← current architecture diagram
 ├── Whats_done.md             ← session progress tracker
 ├── contracts.json            ← Phase 0 contracts registry
+├── codegraph.json            ← tree-sitter knowledge graph (v2)
 ├── patterns.json             ← dynamic learned patterns
 ├── session-state.json        ← resumable session state
 ├── process-state.json        ← command cache (TTL-based)
 ├── current-session.txt       ← current git session ID
-├── experiences.json          ← experience journal (500 entries)
-├── memories/
-│   ├── backend-lead.md
-│   ├── frontend-lead.md
-│   └── ...                   ← per-agent memory files
+├── experiences.json          ← experience journal
+├── tasks.json                ← durable task queue
+├── usage.json                ← token / cost ledger
+├── audit.jsonl               ← audit log
+├── checkpoints.db            ← durable LangGraph checkpoints
+├── memories/                 ← per-agent + semantic memory
 ├── transcripts/              ← searchable session history
-└── snapshots/                ← file backups before edits
+├── snapshots/                ← file backups before edits
+├── skills/                   ← project-layer skills
+└── reports/                  ← session end reports
 ```
 
 ---
 
-*SajiCode v1.2.3 — Built by [Rahees Ahmed](https://github.com/RaheesAhmed)*
+## 36. Tree-Sitter Code Graph
+
+Persistent structural map of the repo for large-codebase retrieval without stuffing the context window.
+
+### How it works
+- Parses **TypeScript, TSX, JavaScript, Python, Go** via `web-tree-sitter` WASM
+- Extracts symbols + **call sites** from AST `call_expression` nodes (with line numbers)
+- Ranks files with **PageRank** for retrieval budgets
+- Persists to `.sajicode/codegraph.json` (graph version **v2**)
+- **Regex fallback** for unsupported languages or WASM load failure
+
+### Tools
+| Tool | What it does |
+|:--|:--|
+| `query_code_graph` / ranked map tools | Return PageRank-ranked files within a token budget |
+| Call-site queries | “Who calls this?” with accurate line numbers |
+
+### Config
+```json
+{ "codeGraph": { "enabled": true } }
+```
+
+---
+
+## 37. Prompt Compression
+
+Query-aware line compression (LLMLingua-style) to shrink large context blobs before they hit the model.
+
+```json
+{ "compression": { "enabled": true } }
+```
+
+Keeps structural lines and query-relevant lines within a character budget. Off by default.
+
+---
+
+## 38. Semantic Memory & Consolidation
+
+### Semantic memory
+Embedding-backed retrieval over project memories (beyond keyword-only pointer index). Used to pull relevant past decisions and experiences into the current turn.
+
+### Sleep-time consolidation
+Nightly (or heartbeat-scheduled) task that compacts episodic memory into durable summaries so session #100 stays cheaper and sharper than session #1.
+
+---
+
+## 39. Skill Promotion Loop
+
+Closed learning loop: after complex work, experiences / patterns that repeatedly succeed are **promoted** into git-versioned project skills at `.sajicode/skills/<topic>/SKILL.md`.
+
+| Piece | Role |
+|:--|:--|
+| `record_experience` / `record_pattern` | Capture what worked / failed |
+| `promote_skill` tool | Distill into Agent Skills–compliant `SKILL.md` |
+| Layering | project > plugin > user > bundled |
+
+Skills follow the [Agent Skills](https://agentskills.io) spec — `name` in frontmatter **must match** the directory name.
+
+```bash
+sajicode skill list
+sajicode skill new my-topic
+sajicode skill lint
+```
+
+---
+
+## 40. Daemon, Heartbeat & Task Queue
+
+Always-on autonomy layer around the same PM + leads core.
+
+### Daemon
+```bash
+sajicode daemon start
+sajicode daemon stop
+sajicode daemon status
+sajicode daemon install          # systemd / LaunchAgent / Windows service instructions
+sajicode daemon deploy --backend docker   # or modal | daytona
+```
+
+Long-running process: HTTP serve + task queue + heartbeat. Survives restarts when checkpoints are durable.
+
+### Heartbeat
+Evaluates `.sajicode/HEARTBEAT.md` on an interval (e.g. CI red? unfinished work? security advisories?) and enqueues work **without a human prompt**.
+
+### Durable task queue
+```bash
+sajicode task add "Run standup and fix red CI" --kind agent
+sajicode task list
+sajicode task cancel <id>
+```
+
+Kinds: `agent` | `consolidation` | `heartbeat`. Ledger persists under `.sajicode/` so the daemon picks up `queued` / `running` tasks after reboot.
+
+### Serve
+```bash
+sajicode serve
+```
+
+HTTP dashboard surface + optional channels + A2A mount.
+
+---
+
+## 41. Agent Handoffs & Message Bus
+
+Direct lead-to-lead coordination without bouncing every micro-step through the PM.
+
+| Tool | What it does |
+|:--|:--|
+| `handoff_to_agent` | Pass work + context to another lead |
+| `accept_handoff` | Acknowledge ownership |
+| `complete_handoff` | Close the handoff with artifacts |
+
+Backed by an in-process message bus / LangGraph swarm handoff protocol.
+
+---
+
+## 42. Research, Debate & Consensus
+
+Human-like judgment path for architecture and high-risk decisions.
+
+1. **Research Lead** — multi-hop cited research  
+2. **Debate protocol** — structured pro/con + ADR draft  
+3. **Multi-model consensus** — optional second-model vote before locking a decision  
+
+Used when the PM classifies a decision as judgment-heavy (framework choice, auth model, data store, etc.).
+
+---
+
+## 43. Personas & Business MCP
+
+### Personas (SOUL.md-style)
+`.sajicode/persona.md` (or bundled packs) injects identity, tone, priorities, and constraints atop the PM prompt.
+
+```bash
+sajicode persona list
+sajicode persona set engineering-pm
+sajicode persona business-mcp shopify   # apply business MCP template
+```
+
+Starter packs include engineering PM, security-officer (Guardian), store-manager, and non-developer conversational modes.
+
+### Business MCP templates
+One-shot wiring for Shopify / Stripe / Gmail / Sheets / Slack-style MCP servers so the same daemon + team can run business workflows, not only code repos.
+
+---
+
+## 44. Browser Tools (CDP)
+
+Attach to a **logged-in Chrome** via Chrome DevTools Protocol — no separate cloud browser.
+
+- Allowlisted domains / actions for safety  
+- Useful for visual verification, admin UIs, and real-world account flows  
+- Complements the verification ladder (§45)
+
+---
+
+## 45. Verification Ladder & Auto-Ship
+
+### Verification ladder
+Ordered gates after implementation:
+
+1. Typecheck / lint  
+2. Unit / integration tests  
+3. Runtime **smoke** (start app + health URL)  
+4. Optional Playwright E2E / visual review  
+
+### Auto-ship
+- PR-with-report flow when gates pass  
+- `sajicode fix-ci` — fetch latest failed CI log and run a headless fix attempt  
+
+```bash
+sajicode fix-ci
+```
+
+---
+
+## 46. A2A Interoperability
+
+Agent-to-Agent protocol so **other systems** can drive SajiCode (and SajiCode can call external agents).
+
+### Inbound
+- Agent card at `/.well-known/agent.json` (when `sajicode serve` / daemon is up)
+- Skills exposed: `sajicode_build`, `sajicode_audit`, `sajicode_guardian`, standup, status
+
+### Outbound
+- PM tools to discover / call remote A2A agents and fold artifacts back into shared state
+
+### Config
+```json
+{
+  "a2a": {
+    "enabled": true,
+    "publicUrl": "http://localhost:3847"
+  }
+}
+```
+
+Complementary to MCP: **MCP = agent↔tools**, **A2A = agent↔agent**.
+
+---
+
+## 47. Guardian Swarm
+
+Defensive SOC layer — same team harness pointed at **server / system defense**.
+
+```bash
+sajicode guardian scan
+sajicode guardian incidents
+```
+
+| Piece | Role |
+|:--|:--|
+| Orchestrator | Runs a Guardian cycle over telemetry + cached signals |
+| Tiered response | Escalate from observe → contain with consensus gates |
+| Incident graph | Knowledge graph of incidents for prediction / self-healing |
+| Persona | `security-officer` for Guardian-oriented PM behavior |
+
+Telemetry can be fed via MCP. Findings persist for later `incidents` queries.
+
+---
+
+## 48. Plugins
+
+Installable capability packs (tools, skills, agent specs) without forking core.
+
+```bash
+sajicode plugin list
+sajicode plugin search
+sajicode plugin add ./my-plugin
+sajicode plugin install <registry-or-npm-name>
+sajicode plugin remove <name>
+```
+
+Layers: project / user / bundled. Manifest declares version, capabilities, and consent surface before load.
+
+---
+
+## 49. Observability & Cost Tracking
+
+### Usage ledger
+- Callback on every LLM call reads LangChain **`usage_metadata`** (and streaming usage chunks)
+- Persists to `.sajicode/usage.json` with per-agent, per-model, token in/out
+- **Model-aware pricing**; local Ollama (`localhost`) costs **$0** unless env overrides are set
+
+```bash
+sajicode costs
+```
+
+Optional overrides:
+
+```bash
+SAJICODE_INPUT_COST_PER_1K=0.0003
+SAJICODE_OUTPUT_COST_PER_1K=0.0012
+```
+
+### Session reports
+On exit / finalize: cost summary + path to `.sajicode/reports/<thread>.md`.
+
+### Budget
+```json
+{ "budget": { "perSession": 10, "action": "warn" } }
+```
+
+`warn` or `pause` when the session approaches / exceeds the cap.
+
+### Audit log
+`.sajicode/audit.jsonl` — tool / security events for enterprise review.
+
+---
+
+## 50. Durable Checkpointing & Resume
+
+LangGraph state persists to **SQLite** (`.sajicode/checkpoints.db`) instead of in-memory-only savers, so crashes mid-build are recoverable.
+
+```bash
+sajicode resume
+```
+
+Reattaches to the last checkpoint / thread. Combined with `session-state.json` and PROJECT.dna unfinished work for true cross-session continuity.
+
+---
+
+## 51. Eval Harness
+
+Scenario-based regression suite for SajiCode itself (build smoke, allowlists, CLI smoke, etc.).
+
+```bash
+sajicode eval
+# or
+npm run eval
+```
+
+Scenarios live under `evals/scenarios/`. Used to prove harness gains after upgrades.
+
+---
+
+## 52. SBOM
+
+Generate a CycloneDX software bill of materials for the project (compliance / supply-chain).
+
+```bash
+sajicode sbom
+```
+
+Requires a resolvable `package.json` (or equivalent) in the project path.
+
+---
+
+*SajiCode v1.2.4 — Built by [Rahees Ahmed](https://github.com/RaheesAhmed)*
