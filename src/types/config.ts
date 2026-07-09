@@ -78,11 +78,23 @@ export interface DaemonConfig {
   heartbeatIntervalMs?: number;
   taskPollIntervalMs?: number;
   port?: number;
+  backend?: "local" | "docker" | "modal" | "daytona";
 }
 
 export interface BrowserConfig {
   cdpUrl?: string;
   allowedDomains?: string[];
+}
+
+export interface A2aConfig {
+  enabled?: boolean;
+  publicUrl?: string;
+}
+
+export interface GuardianConfig {
+  enabled?: boolean;
+  tier3Auto?: boolean;
+  telemetrySources?: string[];
 }
 
 export interface ProjectConfig {
@@ -99,6 +111,8 @@ export interface ProjectConfig {
   compression?: CompressionConfig;
   daemon?: DaemonConfig;
   browser?: BrowserConfig;
+  a2a?: A2aConfig;
+  guardian?: GuardianConfig;
   /** Remote plugin registry JSON URL (optional) */
   pluginRegistryUrl?: string;
   riskTolerance: RiskTolerance;

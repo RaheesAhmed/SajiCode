@@ -18,6 +18,7 @@ export interface ServeOptions {
   enableWhatsApp?: boolean;
   enableTelegram?: boolean;
   enableSlack?: boolean;
+  enableA2a?: boolean;
 }
 
 export interface ServeHandle {
@@ -109,6 +110,7 @@ export async function startServeServer(options: ServeOptions): Promise<ServeHand
     enableWhatsApp = false,
     enableTelegram = false,
     enableSlack = false,
+    enableA2a = true,
   } = options;
 
   const app = express();
@@ -212,6 +214,18 @@ export async function startServeServer(options: ServeOptions): Promise<ServeHand
   });
 
   const url = `http://${host}:${port}`;
+
+  const a2aEnabled = enableA2a && config.a2a?.enabled !== false;
+  if (a2aEnabled) {
+    const { mountA2aRoutes } = await import("../a2a/server.js");
+    mountA2aRoutes(app, {
+      projectPath,
+      config,
+      onboardingResult,
+      publicUrl: config.a2a?.publicUrl ?? url,
+    });
+    console.log(chalk.green(`  ✓ A2A agent card at ${config.a2a?.publicUrl ?? url}/.well-known/agent.json`));
+  }
 
   if (channelRouter) {
     await channelRouter.start();

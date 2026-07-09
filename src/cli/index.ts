@@ -785,6 +785,7 @@ program
   .option("--telegram", "Attach Telegram bot (TELEGRAM_BOT_TOKEN env)", false)
   .option("--slack", "Attach Slack events (SLACK_BOT_TOKEN + SLACK_SIGNING_SECRET env)", false)
   .option("--offline", "Air-gapped mode: Ollama only, no web search or telemetry", false)
+  .option("--no-a2a", "Disable A2A agent card and task endpoints", false)
   .action(async (options: {
     path: string;
     port: string;
@@ -793,6 +794,7 @@ program
     telegram: boolean;
     slack: boolean;
     offline: boolean;
+    noA2a: boolean;
   }) => {
     const { startServeServer } = await import("../server/index.js");
     const projectPath = path.resolve(options.path);
@@ -827,6 +829,7 @@ program
       enableWhatsApp: options.whatsapp,
       enableTelegram: options.telegram,
       enableSlack: options.slack,
+      enableA2a: !options.noA2a,
     });
 
     const shutdown = async () => {
@@ -853,6 +856,11 @@ daemonCmd
   .option("--telegram", "Attach Telegram bot (TELEGRAM_BOT_TOKEN env)", false)
   .option("--slack", "Attach Slack events (SLACK_BOT_TOKEN + SLACK_SIGNING_SECRET env)", false)
   .option("--offline", "Air-gapped mode: Ollama only", false)
+  .option(
+    "-b, --backend <kind>",
+    "Daemon backend: local, docker, modal, daytona (modal/daytona generate deploy artifacts)",
+    "local",
+  )
   .action(async (options: {
     path: string;
     port: string;
@@ -861,8 +869,9 @@ daemonCmd
     telegram: boolean;
     slack: boolean;
     offline: boolean;
+    backend: string;
   }) => {
-    const { startDaemon } = await import("../daemon/index.js");
+    const { startDaemonWithBackend } = await import("../daemon/backends/index.js");
     const projectPath = path.resolve(options.path);
     await ensureProjectDir(projectPath);
     let config = await loadConfig(projectPath);
@@ -875,6 +884,12 @@ daemonCmd
       config = offlineMod.applyOfflineMode(config);
     }
 
+    const backend = options.backend as "local" | "docker" | "modal" | "daytona";
+    config = {
+      ...config,
+      daemon: { ...config.daemon, backend },
+    };
+
     const onboardingResult = {
       experienceLevel: "expert" as const,
       projectDescription: "Daemon mode — background tasks and heartbeat",
@@ -883,7 +898,7 @@ daemonCmd
       stackPreferences: {},
     };
 
-    const handle = await startDaemon({
+    const { handle, result } = await startDaemonWithBackend({
       projectPath,
       config,
       onboardingResult,
@@ -894,7 +909,13 @@ daemonCmd
       enableSlack: options.slack,
     });
 
-    void handle;
+    console.log(chalk.gray(result.message));
+
+    if (!handle) {
+      if (!result.started) process.exit(0);
+      return;
+    }
+
     const shutdown = async () => {
       console.log(chalk.gray("\nShutting down daemon..."));
       await handle.stop();
@@ -903,6 +924,32 @@ daemonCmd
 
     process.on("SIGINT", () => void shutdown());
     process.on("SIGTERM", () => void shutdown());
+  });
+
+daemonCmd
+  .command("deploy")
+  .description("Generate serverless/container deploy artifacts for modal, daytona, or docker")
+  .option("-p, --path <path>", "Project directory", process.cwd())
+  .option(
+    "-b, --backend <kind>",
+    "Backend: docker, modal, daytona",
+    "docker",
+  )
+  .option("--port <port>", "Host port for docker backend", "3920")
+  .action(async (options: { path: string; backend: string; port: string }) => {
+    const { deployDaemonBackend } = await import("../daemon/backends/index.js");
+    const projectPath = path.resolve(options.path);
+    await ensureProjectDir(projectPath);
+    const backend = options.backend as "docker" | "modal" | "daytona";
+    const result = await deployDaemonBackend(
+      projectPath,
+      backend,
+      Number.parseInt(options.port, 10) || 3920,
+    );
+    console.log(chalk.cyan(result.instructions));
+    for (const artifact of result.artifactPaths) {
+      console.log(chalk.gray(`Artifact: ${artifact}`));
+    }
   });
 
 daemonCmd
@@ -1068,6 +1115,76 @@ personaCmd
     } catch (error) {
       console.error(chalk.red(error instanceof Error ? error.message : String(error)));
       process.exit(1);
+    }
+  });
+
+personaCmd
+  .command("business-mcp")
+  .description("Apply a business MCP template (Shopify/Stripe/Gmail, Sheets/Slack)")
+  .argument("[id]", "Template id (store-retail, business-ops) — list if omitted")
+  .option("-p, --path <path>", "Project directory", process.cwd())
+  .action(async (id: string | undefined, options: { path: string }) => {
+    const {
+      applyBusinessMcpTemplate,
+      formatBusinessMcpList,
+    } = await import("../persona/business-mcp.js");
+
+    if (!id) {
+      console.log(chalk.cyan(formatBusinessMcpList()));
+      return;
+    }
+
+    try {
+      const result = await applyBusinessMcpTemplate(options.path, id);
+      console.log(chalk.green(`Applied template "${result.template.name}"`));
+      for (const file of result.saved) {
+        console.log(chalk.gray(`  → ${file}`));
+      }
+    } catch (error) {
+      console.error(chalk.red(error instanceof Error ? error.message : String(error)));
+      process.exit(1);
+    }
+  });
+
+const guardianCmd = program
+  .command("guardian")
+  .description("Guardian Swarm — defensive SOC scan and incident graph");
+
+guardianCmd
+  .command("scan")
+  .description("Run a Guardian cycle on cached + optional telemetry")
+  .option("-p, --path <path>", "Project directory", process.cwd())
+  .option("--signal <text>", "Extra telemetry signal to include")
+  .action(async (options: { path: string; signal?: string }) => {
+    const { loadConfig } = await import("../config/index.js");
+    const { runGuardianCycle } = await import("../guardian/orchestrator.js");
+    const projectPath = path.resolve(options.path);
+    const config = await loadConfig(projectPath);
+    config.projectPath = projectPath;
+
+    const incoming = options.signal
+      ? [{ source: "cli", message: options.signal, severity: "warning" as const }]
+      : [];
+
+    const result = await runGuardianCycle(projectPath, config, incoming);
+    console.log(result.report);
+    if (!result.ok) process.exit(1);
+  });
+
+guardianCmd
+  .command("incidents")
+  .description("List incidents from the knowledge graph")
+  .option("-p, --path <path>", "Project directory", process.cwd())
+  .action(async (options: { path: string }) => {
+    const {
+      loadIncidentGraph,
+      formatIncidentGraphSummary,
+    } = await import("../guardian/incident-graph.js");
+    const projectPath = path.resolve(options.path);
+    const graph = await loadIncidentGraph(projectPath);
+    console.log(formatIncidentGraphSummary(graph));
+    for (const incident of graph.incidents.slice(0, 10)) {
+      console.log(chalk.gray(`  ${incident.id} [${incident.status}] ${incident.title}`));
     }
   });
 

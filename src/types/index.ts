@@ -22,6 +22,8 @@ export {
   type RiskAssessment,
   type BrowserConfig,
   type DaemonConfig,
+  type A2aConfig,
+  type GuardianConfig,
   AgentRole,
   RiskLevel,
   AGENT_ICONS,

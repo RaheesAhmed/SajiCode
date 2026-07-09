@@ -117,11 +117,23 @@ const daemonConfigSchema = z.object({
   heartbeatIntervalMs: z.number().int().positive().optional(),
   taskPollIntervalMs: z.number().int().positive().optional(),
   port: z.number().int().positive().optional(),
+  backend: z.enum(["local", "docker", "modal", "daytona"]).optional(),
 });
 
 const browserConfigSchema = z.object({
   cdpUrl: z.string().optional(),
   allowedDomains: z.array(z.string()).optional(),
+});
+
+const a2aConfigSchema = z.object({
+  enabled: z.boolean().optional(),
+  publicUrl: z.string().url().optional(),
+});
+
+const guardianConfigSchema = z.object({
+  enabled: z.boolean().optional(),
+  tier3Auto: z.boolean().optional(),
+  telemetrySources: z.array(z.string()).optional(),
 });
 
 const hooksSchema = z.object({
@@ -156,6 +168,8 @@ const KNOWN_CONFIG_KEYS = new Set([
   "compression",
   "daemon",
   "browser",
+  "a2a",
+  "guardian",
   "pluginRegistryUrl",
   "riskTolerance",
   "humanInTheLoop",
@@ -178,6 +192,8 @@ export const configFileSchema = z.object({
   compression: compressionConfigSchema.optional(),
   daemon: daemonConfigSchema.optional(),
   browser: browserConfigSchema.optional(),
+  a2a: a2aConfigSchema.optional(),
+  guardian: guardianConfigSchema.optional(),
   pluginRegistryUrl: z.string().url().optional(),
   riskTolerance: riskToleranceSchema.optional(),
   humanInTheLoop: humanInTheLoopSchema.optional(),

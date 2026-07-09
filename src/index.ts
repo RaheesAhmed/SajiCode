@@ -23,6 +23,7 @@ const CLI_SUBCOMMANDS = new Set([
   "persona",
   "sbom",
   "eval",
+  "guardian",
 ]);
 
 /** Strip Node/npm `--` separator so `node dist/index.js -- mcp list` works. */

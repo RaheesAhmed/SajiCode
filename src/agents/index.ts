@@ -69,6 +69,8 @@ import { createPromoteSkillTool } from "../skills/promote.js";
 import { createSmokeCheckTools } from "../tools/verification-ladder.js";
 import { createDeployTools, createCiTools } from "../tools/deploy-tools.js";
 import { createShipTools } from "../tools/ship-tools.js";
+import { createA2aTools } from "../tools/a2a-tools.js";
+import { createGuardianTools } from "../tools/guardian-tools.js";
 import { finalizeSession } from "../observability/session-end.js";
 import { getCheckpointer, saveCurrentThread } from "../memory/index.js";
 
@@ -314,6 +316,8 @@ export async function createSajiCode(
       ...createDeployTools(config.projectPath),
       ...createCiTools(config.projectPath),
       ...createShipTools(config.projectPath),
+      ...createA2aTools(),
+      ...createGuardianTools(config.projectPath, config),
       // Dynamic agent registry: list_available_agents + pick_best_agent
       ...registryTools,
     ] as any,

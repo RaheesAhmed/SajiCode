@@ -84,6 +84,12 @@ function deepMergeConfig(
     browser: overlay.browser
       ? { ...(base.browser ?? {}), ...overlay.browser }
       : base.browser,
+    a2a: overlay.a2a
+      ? { ...(base.a2a ?? {}), ...overlay.a2a }
+      : base.a2a,
+    guardian: overlay.guardian
+      ? { ...(base.guardian ?? {}), ...overlay.guardian }
+      : base.guardian,
     pluginRegistryUrl: overlay.pluginRegistryUrl ?? base.pluginRegistryUrl,
   };
 }
