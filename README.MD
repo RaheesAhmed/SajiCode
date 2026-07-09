@@ -2,8 +2,6 @@
   <img src="./logo.svg" width="280" alt="SajiCode" />
 </p>
 
-<h1 align="center">SajiCode</h1>
-
 <p align="center">
   <strong>The autonomous engineering organism.</strong><br/>
   A contract-first multi-agent team that plans, builds, tests, ships — and keeps running when you walk away.
