@@ -42,6 +42,8 @@ export async function createModelForAgent(
       sessionId: context.sessionId,
       agentName,
       modelName: agentConfig.modelName,
+      provider: agentConfig.provider,
+      ...(agentConfig.baseUrl ? { baseUrl: agentConfig.baseUrl } : {}),
     });
     model = model.withConfig({ callbacks: [usageHandler] }) as BaseChatModel;
   }

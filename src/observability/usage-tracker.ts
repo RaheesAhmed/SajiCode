@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import type { BudgetConfig } from "../types/index.js";
+import { estimateCostFromUsage } from "./model-pricing.js";
 
 export type { BudgetConfig };
 
@@ -9,6 +10,7 @@ export interface UsageEntry {
   sessionId: string;
   agentName: string;
   model: string;
+  provider?: string;
   inputTokens: number;
   outputTokens: number;
   estimatedCostUsd: number;
@@ -21,17 +23,19 @@ export interface UsageStore {
 
 const USAGE_FILE = ".sajicode/usage.json";
 
-// Rough defaults — users can override via SAJICODE_COST_PER_1K
-const DEFAULT_INPUT_COST_PER_1K = 0.003;
-const DEFAULT_OUTPUT_COST_PER_1K = 0.015;
+export interface RecordUsageOptions {
+  baseUrl?: string;
+  provider?: string;
+}
 
 export function estimateCostUsd(
   inputTokens: number,
   outputTokens: number,
+  model = "unknown",
+  provider = "unknown",
+  baseUrl?: string,
 ): number {
-  const inputRate = Number(process.env["SAJICODE_INPUT_COST_PER_1K"] ?? DEFAULT_INPUT_COST_PER_1K);
-  const outputRate = Number(process.env["SAJICODE_OUTPUT_COST_PER_1K"] ?? DEFAULT_OUTPUT_COST_PER_1K);
-  return (inputTokens / 1000) * inputRate + (outputTokens / 1000) * outputRate;
+  return estimateCostFromUsage(inputTokens, outputTokens, { model, provider, baseUrl });
 }
 
 export async function loadUsageStore(projectPath: string): Promise<UsageStore> {
@@ -63,14 +67,23 @@ export async function recordUsage(
   entry: Omit<UsageEntry, "timestamp" | "estimatedCostUsd"> & {
     estimatedCostUsd?: number;
   },
+  options?: RecordUsageOptions,
 ): Promise<UsageEntry> {
   const store = await loadUsageStore(projectPath);
+  const provider = entry.provider ?? options?.provider ?? "unknown";
   const full: UsageEntry = {
     ...entry,
+    provider,
     timestamp: new Date().toISOString(),
     estimatedCostUsd:
       entry.estimatedCostUsd
-      ?? estimateCostUsd(entry.inputTokens, entry.outputTokens),
+      ?? estimateCostUsd(
+        entry.inputTokens,
+        entry.outputTokens,
+        entry.model,
+        provider,
+        options?.baseUrl,
+      ),
   };
   store.entries.push(full);
   await saveUsageStore(projectPath, store);
@@ -96,6 +109,21 @@ export function costByAgent(
     result[entry.agentName] = (result[entry.agentName] ?? 0) + entry.estimatedCostUsd;
   }
   return result;
+}
+
+export function sumSessionTokens(
+  store: UsageStore,
+  sessionId: string,
+): { inputTokens: number; outputTokens: number } {
+  return store.entries
+    .filter((e) => e.sessionId === sessionId)
+    .reduce(
+      (acc, e) => ({
+        inputTokens: acc.inputTokens + e.inputTokens,
+        outputTokens: acc.outputTokens + e.outputTokens,
+      }),
+      { inputTokens: 0, outputTokens: 0 },
+    );
 }
 
 export function checkBudget(
@@ -140,17 +168,22 @@ export async function formatCostsReport(
   }
 
   const total = recent.reduce((s, e) => s + e.estimatedCostUsd, 0);
+  const totalInput = recent.reduce((s, e) => s + e.inputTokens, 0);
+  const totalOutput = recent.reduce((s, e) => s + e.outputTokens, 0);
   const byAgent = costByAgent({ version: 1, entries: recent });
 
   const lines = [
     `Usage report (last ${days} days):`,
-    `  Total estimated cost: $${total.toFixed(2)}`,
-    `  API calls: ${recent.length}`,
+    `  Total cost: $${total.toFixed(4)}`,
+    `  Tokens: ${totalInput.toLocaleString()} in / ${totalOutput.toLocaleString()} out`,
+    `  LLM calls: ${recent.length}`,
     "",
     "  By agent:",
     ...Object.entries(byAgent)
       .sort((a, b) => b[1] - a[1])
-      .map(([agent, cost]) => `    ${agent}: $${cost.toFixed(2)}`),
+      .map(([agent, cost]) => `    ${agent}: $${cost.toFixed(4)}`),
+    "",
+    "  (Costs from LangChain usage_metadata + model pricing; local Ollama = $0)",
   ];
 
   return lines.join("\n");
