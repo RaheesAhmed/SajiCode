@@ -181,9 +181,8 @@ export class SafeShellBackend extends LocalShellBackend {
 }
 
 /**
- * Creates an explicit `execute` LangChain tool backed by SafeShellBackend.
- * Use this when deepagents does NOT auto-register the execute tool (e.g. PM
- * agent uses CompositeBackend which breaks automatic tool registration).
+ * @deprecated deepagents registers `execute` from the backend automatically.
+ * Kept for callers that need an explicit tool outside createDeepAgent.
  */
 export function createExecuteTool(backend: SafeShellBackend) {
   return tool(
