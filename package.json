@@ -1,7 +1,7 @@
 {
   "name": "sajicode",
   "version": "1.2.4",
-  "description": "",
+  "description": "Autonomous multi-agent engineering team — contract-first parallel builds, git-native safety, persistent memory, 24/7 daemon, Guardian SOC swarm, MCP + A2A.",
   "main": "dist/index.js",
   "files": [
     "dist",
@@ -26,7 +26,7 @@
     "version:minor": "npm version minor && git push && git push --tags",
     "version:major": "npm version major && git push && git push --tags"
   },
-  "keywords": [],
+  "keywords": ["ai", "agents", "multi-agent", "coding", "cli", "langgraph", "mcp", "devops", "security"],
   "author": "Rahees Ahmed",
   "authorURL": "https://github.com/raheesahmed",
   "license": "MIT",

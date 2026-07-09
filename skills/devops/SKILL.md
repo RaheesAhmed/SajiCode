@@ -1,5 +1,5 @@
 ---
-name: devops-patterns
+name: devops
 description: Cloud-native DevOps and infrastructure automation. Covers Docker multi-stage builds, Kubernetes deployments, GitHub Actions CI/CD, Vercel/AWS/GCP deployment, monitoring with Prometheus and Grafana, logging, health checks, infrastructure as code, and production readiness checklists. Use when deploying, containerizing, or setting up CI/CD pipelines.
 ---
 

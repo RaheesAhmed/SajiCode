@@ -1,5 +1,5 @@
 ---
-name: testing-patterns
+name: testing
 description: Design and implement comprehensive test suites. Covers unit testing, integration testing, E2E testing with Playwright, API testing, mocking strategies, test data factories, TDD workflow, snapshot testing, coverage targets, and CI integration. Use when writing tests, designing test architecture, or debugging test failures.
 ---
 

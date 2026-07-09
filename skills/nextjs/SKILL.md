@@ -1,5 +1,5 @@
 ---
-name: nextjs-fullstack
+name: nextjs
 description: Build full-stack applications with Next.js 15, React 19, and App Router. Covers server components, server actions, parallel routes, intercepting routes, middleware authentication, ISR/SSG/SSR strategies, streaming, API route patterns, edge runtime, and performance optimization. Use when building Next.js applications.
 ---
 

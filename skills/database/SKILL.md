@@ -1,5 +1,5 @@
 ---
-name: database-patterns
+name: database
 description: Design and implement production database systems. Covers schema design, migrations, query optimization, ORMs (Prisma, Drizzle, TypeORM), PostgreSQL/SQLite/MongoDB patterns, indexing strategies, connection pooling, and multi-tenant architectures. Use when designing schemas, writing queries, or setting up data access layers.
 ---
 

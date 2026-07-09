@@ -160,8 +160,17 @@ export async function lintSkills(projectPath: string): Promise<SkillLintResult[]
           issues.push("Unclosed frontmatter block");
         } else {
           const frontmatter = content.slice(3, frontmatterEnd);
-          if (!/^name:\s*.+/m.test(frontmatter)) {
+          const nameMatch = frontmatter.match(/^name:\s*(.+)$/m);
+          if (!nameMatch) {
             issues.push("Frontmatter missing 'name:' field");
+          } else {
+            const declaredName = nameMatch[1]!.trim().replace(/^['"]|['"]$/g, "");
+            const dirName = path.basename(skillDir);
+            if (declaredName !== dirName) {
+              issues.push(
+                `name '${declaredName}' must match directory name '${dirName}' (Agent Skills spec)`,
+              );
+            }
           }
           if (!/^description:\s*.+/m.test(frontmatter)) {
             issues.push("Frontmatter missing 'description:' field");

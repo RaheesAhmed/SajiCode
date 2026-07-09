@@ -1,5 +1,5 @@
 ---
-name: security-audit
+name: security
 description: Comprehensive security auditing and hardening for web applications. Covers OWASP Top 10 with real fix patterns, dependency scanning, secrets management, authentication/authorization implementation, CSP headers, rate limiting, input sanitization, and vulnerability remediation. Use when auditing security, implementing auth, or hardening an application.
 ---
 

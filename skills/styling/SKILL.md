@@ -1,5 +1,5 @@
 ---
-name: styling-patterns
+name: styling
 description: Implement production styling systems with Tailwind CSS, vanilla CSS, or CSS-in-JS. Covers CSS architecture (BEM, utility-first, modules), design tokens, responsive patterns, animation systems, dark mode, container queries, print styles, and performance optimization. Use when implementing designs or building CSS architectures.
 ---
 

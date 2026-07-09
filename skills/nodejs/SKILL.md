@@ -1,5 +1,5 @@
 ---
-name: nodejs-patterns
+name: nodejs
 description: Build production-grade Node.js backend services with Express, Fastify, or Hono. Covers middleware architecture, stream processing, worker threads, WebSocket implementation, queue processing with BullMQ, Redis caching, structured logging, graceful shutdown, and error handling patterns. Use when building backend APIs or server-side services.
 ---
 

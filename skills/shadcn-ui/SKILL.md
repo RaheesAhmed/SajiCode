@@ -1,5 +1,5 @@
 ---
-name: shadcn-ui-system
+name: shadcn-ui
 description: Build premium interfaces with shadcn/ui components, Radix primitives, and Tailwind CSS. Covers installation, component customization, theming, dark mode, form patterns with react-hook-form + Zod, data tables with sorting/filtering/pagination, command palette, toast patterns, and composable component architecture. Use when building UI with shadcn/ui.
 ---
 
