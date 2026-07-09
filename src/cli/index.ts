@@ -1072,6 +1072,37 @@ personaCmd
   });
 
 program
+  .command("eval")
+  .description("Run eval harness scenarios (build, smoke-detect, allowlist, CLI smoke)")
+  .option("--scenario <name>", "Run a single scenario by name")
+  .action(async (options: { scenario?: string }) => {
+    const { fileURLToPath } = await import("node:url");
+    const { runEvals } = await import("../evals/harness.js");
+    const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+    try {
+      const { allPassed, results } = await runEvals({
+        repoRoot,
+        scenario: options.scenario,
+      });
+      console.log(chalk.cyan(`Running ${results.length} eval scenario(s)...\n`));
+      for (const result of results) {
+        const icon = result.passed ? chalk.green("✅") : chalk.red("❌");
+        console.log(`${icon} ${result.name}`);
+        if (!result.passed) {
+          for (const detail of result.details) {
+            console.log(chalk.gray(`   • ${detail}`));
+          }
+        }
+      }
+      console.log("");
+      if (!allPassed) process.exit(1);
+    } catch (error) {
+      console.error(chalk.red("Eval failed:"), error);
+      process.exit(1);
+    }
+  });
+
+program
   .command("sbom")
   .description("Generate CycloneDX SBOM for the project")
   .option("-p, --path <path>", "Project directory", process.cwd())

@@ -20,6 +20,8 @@ export {
   type Milestone,
   type MilestoneStatus,
   type RiskAssessment,
+  type BrowserConfig,
+  type DaemonConfig,
   AgentRole,
   RiskLevel,
   AGENT_ICONS,

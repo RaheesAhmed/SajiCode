@@ -51,9 +51,11 @@ import { createResearchTools } from "../tools/research-tools.js";
 import { createSmokeCheckTools } from "../tools/verification-ladder.js";
 import { createE2ETools } from "../tools/e2e-tools.js";
 import { createDeployTools, createCiTools } from "../tools/deploy-tools.js";
+import { createBrowserTools } from "../tools/browser-tools.js";
+import { createShipTools } from "../tools/ship-tools.js";
 import type { ProjectCheckpointer } from "../memory/checkpointer.js";
 import type { MCPClientManager } from "../mcp/MCPClient.js";
-import type { ModelConfig, SandboxConfig, VaultConfig } from "../types/index.js";
+import type { ModelConfig, SandboxConfig, VaultConfig, BrowserConfig } from "../types/index.js";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -149,6 +151,7 @@ export interface AgentFactoryOptions {
   sandbox?: SandboxConfig;
   vault?: VaultConfig;
   offline?: boolean;
+  browser?: BrowserConfig;
   /** When set, leads notify pm-agent on completion via async callback middleware */
   agentProtocolUrl?: string;
   agentProtocolHeaders?: Record<string, string>;
@@ -228,6 +231,7 @@ export async function createAgentFromSpec(
 
   if (spec.name === "qa-lead") {
     tools.push(...createE2ETools(projectPath));
+    tools.push(...createBrowserTools(projectPath, options.browser));
   }
 
   if (spec.name === "research-lead") {
@@ -236,7 +240,11 @@ export async function createAgentFromSpec(
   }
 
   if (spec.name === "deploy-lead" || spec.name === "pm-agent") {
-    tools.push(...createDeployTools(projectPath), ...createCiTools(projectPath));
+    tools.push(
+      ...createDeployTools(projectPath),
+      ...createCiTools(projectPath),
+      ...createShipTools(projectPath),
+    );
   }
 
   const agent = await createDeepAgent({

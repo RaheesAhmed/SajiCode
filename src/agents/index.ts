@@ -68,6 +68,7 @@ import {
 import { createPromoteSkillTool } from "../skills/promote.js";
 import { createSmokeCheckTools } from "../tools/verification-ladder.js";
 import { createDeployTools, createCiTools } from "../tools/deploy-tools.js";
+import { createShipTools } from "../tools/ship-tools.js";
 import { finalizeSession } from "../observability/session-end.js";
 import { getCheckpointer, saveCurrentThread } from "../memory/index.js";
 
@@ -183,6 +184,7 @@ export async function createSajiCode(
     sandbox: config.sandbox,
     vault: config.vault,
     offline: isOfflineMode(config),
+    ...(config.browser ? { browser: config.browser } : {}),
     ...(agentProtocolUrl
       ? {
           agentProtocolUrl,
@@ -311,6 +313,7 @@ export async function createSajiCode(
       ...createSmokeCheckTools(config.projectPath),
       ...createDeployTools(config.projectPath),
       ...createCiTools(config.projectPath),
+      ...createShipTools(config.projectPath),
       // Dynamic agent registry: list_available_agents + pick_best_agent
       ...registryTools,
     ] as any,

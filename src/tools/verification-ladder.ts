@@ -7,6 +7,7 @@ import {
   detectSmokeConfig,
   formatSmokeResult,
 } from "./smoke-check.js";
+import { runPlaywrightSmoke } from "./e2e-tools.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -19,6 +20,7 @@ export interface VerificationRung {
 export interface VerificationLadderResult {
   passed: boolean;
   rungs: VerificationRung[];
+  visualReviewPath?: string;
 }
 
 export async function runVerificationLadder(
@@ -28,6 +30,8 @@ export async function runVerificationLadder(
     healthUrl?: string;
     skipTests?: boolean;
     skipSmoke?: boolean;
+    e2eBaseUrl?: string;
+    skipE2e?: boolean;
   } = {},
 ): Promise<VerificationLadderResult> {
   const rungs: VerificationRung[] = [];
@@ -110,6 +114,23 @@ export async function runVerificationLadder(
     }
   }
 
+  // Rung 4: Playwright E2E (optional)
+  if (options.e2eBaseUrl && !options.skipE2e) {
+    const e2e = await runPlaywrightSmoke(projectPath, { baseUrl: options.e2eBaseUrl });
+    rungs.push({
+      name: "e2e",
+      ok: e2e.ok,
+      summary: e2e.summary,
+    });
+    if (!e2e.ok) {
+      return {
+        passed: false,
+        rungs,
+        ...(e2e.screenshotPath ? { visualReviewPath: e2e.screenshotPath } : {}),
+      };
+    }
+  }
+
   return { passed: true, rungs };
 }
 
@@ -121,6 +142,9 @@ export function formatLadderResult(result: VerificationLadderResult): string {
       (rung) => `${rung.ok ? "✅" : "❌"} ${rung.name}: ${rung.summary.split("\n")[0]}`,
     ),
   ];
+  if (result.visualReviewPath) {
+    lines.push("", `Visual review: inspect screenshot at ${result.visualReviewPath}`);
+  }
   return lines.join("\n");
 }
 
@@ -156,6 +180,8 @@ export function createSmokeCheckTools(projectPath: string) {
       healthUrl?: string;
       skipTests?: boolean;
       skipSmoke?: boolean;
+      e2eBaseUrl?: string;
+      skipE2e?: boolean;
     }) => {
       const result = await runVerificationLadder(projectPath, input);
       return formatLadderResult(result);
@@ -163,13 +189,15 @@ export function createSmokeCheckTools(projectPath: string) {
     {
       name: "run_verification_ladder",
       description:
-        "Run the full verification ladder: build → tests → runtime smoke. " +
-        "Each rung gates the next. Use before declaring a feature complete.",
+        "Run verification ladder: build → tests → runtime smoke → optional Playwright E2E. " +
+        "Screenshots on E2E failure feed visual review.",
       schema: z.object({
         startCommand: z.string().optional(),
         healthUrl: z.string().optional(),
         skipTests: z.boolean().optional(),
         skipSmoke: z.boolean().optional(),
+        e2eBaseUrl: z.string().optional().describe("If set, runs Playwright E2E as final rung"),
+        skipE2e: z.boolean().optional(),
       }),
     },
   );

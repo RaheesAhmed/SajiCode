@@ -1,0 +1,24 @@
+{
+  "name": "browser-allowlist",
+  "description": "CDP browser domain allowlist blocks and permits correctly",
+  "assertions": [
+    {
+      "type": "domain-allowlist",
+      "url": "https://app.example.com/dashboard",
+      "allowedDomains": ["*.example.com"],
+      "expectAllowed": true
+    },
+    {
+      "type": "domain-allowlist",
+      "url": "https://evil.com/phish",
+      "allowedDomains": ["*.example.com"],
+      "expectAllowed": false
+    },
+    {
+      "type": "domain-allowlist",
+      "url": "https://localhost:3000",
+      "allowedDomains": [],
+      "expectAllowed": false
+    }
+  ]
+}

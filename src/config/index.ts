@@ -88,6 +88,7 @@ function mergeConfigFromFile(
     ...(fileConfig.codeGraph ? { codeGraph: fileConfig.codeGraph } : {}),
     ...(fileConfig.compression ? { compression: fileConfig.compression } : {}),
     ...(fileConfig.daemon ? { daemon: fileConfig.daemon } : {}),
+    ...(fileConfig.browser ? { browser: fileConfig.browser } : {}),
     ...(fileConfig.pluginRegistryUrl
       ? { pluginRegistryUrl: fileConfig.pluginRegistryUrl }
       : {}),

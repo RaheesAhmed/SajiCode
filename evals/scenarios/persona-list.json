@@ -1,0 +1,12 @@
+{
+  "name": "persona-list",
+  "description": "Persona CLI lists bundled packs",
+  "assertions": [
+    {
+      "type": "command",
+      "command": "node dist/index.js persona list",
+      "expectExitCode": 0,
+      "expectOutputContains": "engineer"
+    }
+  ]
+}

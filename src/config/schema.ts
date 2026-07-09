@@ -119,6 +119,11 @@ const daemonConfigSchema = z.object({
   port: z.number().int().positive().optional(),
 });
 
+const browserConfigSchema = z.object({
+  cdpUrl: z.string().optional(),
+  allowedDomains: z.array(z.string()).optional(),
+});
+
 const hooksSchema = z.object({
   sessionStart: hookEventSchema.optional(),
   sessionEnd: hookEventSchema.optional(),
@@ -150,6 +155,7 @@ const KNOWN_CONFIG_KEYS = new Set([
   "codeGraph",
   "compression",
   "daemon",
+  "browser",
   "pluginRegistryUrl",
   "riskTolerance",
   "humanInTheLoop",
@@ -171,6 +177,7 @@ export const configFileSchema = z.object({
   codeGraph: codeGraphConfigSchema.optional(),
   compression: compressionConfigSchema.optional(),
   daemon: daemonConfigSchema.optional(),
+  browser: browserConfigSchema.optional(),
   pluginRegistryUrl: z.string().url().optional(),
   riskTolerance: riskToleranceSchema.optional(),
   humanInTheLoop: humanInTheLoopSchema.optional(),

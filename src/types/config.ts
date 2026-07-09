@@ -80,6 +80,11 @@ export interface DaemonConfig {
   port?: number;
 }
 
+export interface BrowserConfig {
+  cdpUrl?: string;
+  allowedDomains?: string[];
+}
+
 export interface ProjectConfig {
   projectPath: string;
   modelConfig: ModelConfig;
@@ -93,6 +98,7 @@ export interface ProjectConfig {
   codeGraph?: CodeGraphConfig;
   compression?: CompressionConfig;
   daemon?: DaemonConfig;
+  browser?: BrowserConfig;
   /** Remote plugin registry JSON URL (optional) */
   pluginRegistryUrl?: string;
   riskTolerance: RiskTolerance;

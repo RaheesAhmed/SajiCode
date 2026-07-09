@@ -142,6 +142,7 @@ export async function createAllRegisteredAgents(
     ...(options.agentProtocolHeaders
       ? { agentProtocolHeaders: options.agentProtocolHeaders }
       : {}),
+    ...(options.browser ? { browser: options.browser } : {}),
   };
 
   if (jsonSpecs.length > 0) {

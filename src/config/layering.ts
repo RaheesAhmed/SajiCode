@@ -81,6 +81,9 @@ function deepMergeConfig(
     daemon: overlay.daemon
       ? { ...(base.daemon ?? {}), ...overlay.daemon }
       : base.daemon,
+    browser: overlay.browser
+      ? { ...(base.browser ?? {}), ...overlay.browser }
+      : base.browser,
     pluginRegistryUrl: overlay.pluginRegistryUrl ?? base.pluginRegistryUrl,
   };
 }
