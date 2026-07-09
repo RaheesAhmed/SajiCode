@@ -37,8 +37,6 @@ export async function createModel(config: ModelConfig): Promise<BaseChatModel> {
       temperature: config.temperature ?? 0,
       maxRetries: config.maxRetries ?? 3,
       maxTokens: config.maxTokens ?? 4096,
-      streaming: true,
-      streamUsage: true,
       apiKey: config.apiKey ?? process.env["OPENROUTER_API_KEY"],
       baseURL: config.baseUrl ?? process.env["OPENROUTER_BASE_URL"],
     });

@@ -1,6 +1,6 @@
-import { AIMessage } from "@langchain/core/messages";
+import { AIMessage, AIMessageChunk } from "@langchain/core/messages";
 import { mergeUsageMetadata, type UsageMetadata } from "@langchain/core/messages";
-import type { LLMResult } from "@langchain/core/outputs";
+import type { ChatGeneration, LLMResult } from "@langchain/core/outputs";
 import type { ChatGenerationChunk } from "@langchain/core/outputs";
 
 /**
@@ -12,8 +12,9 @@ export function extractUsageFromLlmResult(output: LLMResult): UsageMetadata | nu
 
   for (const generationBatch of output.generations) {
     for (const generation of generationBatch) {
-      if (AIMessage.isInstance(generation.message) && generation.message.usage_metadata) {
-        merged = mergeUsageMetadata(merged, generation.message.usage_metadata);
+      const chatGen = generation as ChatGeneration;
+      if (AIMessage.isInstance(chatGen.message) && chatGen.message.usage_metadata) {
+        merged = mergeUsageMetadata(merged, chatGen.message.usage_metadata);
       }
     }
   }
@@ -51,7 +52,11 @@ export function extractUsageFromStreamChunk(
   fields?: Record<string, unknown>,
 ): UsageMetadata | null {
   const chunk = fields?.["chunk"] as ChatGenerationChunk | undefined;
-  const usage = chunk?.message?.usage_metadata;
+  const message = chunk?.message;
+  if (!message || !AIMessageChunk.isInstance(message)) {
+    return null;
+  }
+  const usage = message.usage_metadata;
   if (!usage || (usage.input_tokens === 0 && usage.output_tokens === 0)) {
     return null;
   }
