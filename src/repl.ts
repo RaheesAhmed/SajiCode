@@ -22,6 +22,7 @@ import {
   type SessionTranscriptRecorder,
 } from "./memory/session-transcript.js";
 import { augmentInputWithMemoryContext } from "./memory/turn-context.js";
+import { printCliCommandsReference } from "./cli/help-reference.js";
 
 const ORANGE = chalk.hex("#FF8C00");
 const GY = chalk.gray;
@@ -490,14 +491,14 @@ function printHelp(): void {
   const label = chalk.hex("#FF9500");
   const desc  = chalk.hex("#888888");
   console.log("");
-  console.log(dim("  ─── Commands ──────────────────────────────"));
+  console.log(dim("  ─── REPL commands (inside chat) ───────────"));
   console.log(`  ${label("/init")}     ${desc("Scan project → generate SAJICODE.md")}`);
   console.log(`  ${label("/status")}   ${desc("Show session + approval settings")}`);
   console.log(`  ${label("/clear")}    ${desc("Clear terminal")}`);
   console.log(`  ${label("/help")}     ${desc("Show this menu")}`);
   console.log(`  ${label("/exit")}     ${desc("Exit SajiCode")}`);
   console.log(dim("  ──────────────────────────────────────────"));
-  console.log("");
+  printCliCommandsReference();
 }
 
 // ── CLI arg parser ─────────────────────────────────────────────────────────────
