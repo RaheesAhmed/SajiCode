@@ -6,7 +6,24 @@ import {
   CodeGraphIndex,
   resetCodeGraphCache,
 } from "../src/context/codegraph.js";
+import { initTreeSitter, parseWithTreeSitter, getTreeSitterInitError } from "../src/context/tree-sitter-parser.js";
 import { compressText, resolveCompressionOptions } from "../src/context/compression.js";
+
+describe("tree-sitter parser", () => {
+  it("initializes and parses TypeScript call expressions", async () => {
+    const ok = await initTreeSitter();
+    expect(ok, getTreeSitterInitError() ?? "init failed").toBe(true);
+
+    const parsed = await parseWithTreeSitter(
+      "export function other() { return helper(); }",
+      "typescript",
+    );
+    expect(parsed).not.toBeNull();
+    expect(parsed!.symbols.some((s) => s.name === "other")).toBe(true);
+    expect(parsed!.references).toContain("helper");
+    expect(parsed!.callSites.some((c) => c.symbol === "helper")).toBe(true);
+  });
+});
 
 describe("code graph", () => {
   let tmpDir: string;
@@ -43,6 +60,29 @@ describe("code graph", () => {
     const impact = graph.impactOf("helper");
     expect(impact.definedIn).toBe("src/utils.ts");
     expect(impact.affectedFiles.length).toBeGreaterThan(0);
+  });
+
+  it("uses tree-sitter AST for call sites with line numbers", async () => {
+    const graph = await CodeGraphIndex.load(tmpDir);
+    await graph.buildFullIndex();
+
+    const callers = graph.findCallers("helper");
+    const otherCall = callers.find((c) => c.file === "src/other.ts");
+    expect(otherCall).toBeDefined();
+    expect(otherCall!.snippet).toContain("L");
+    expect(otherCall!.line).toBeGreaterThan(0);
+  });
+
+  it("detects arrow function exports via AST", async () => {
+    await fs.writeFile(
+      path.join(tmpDir, "src", "api.ts"),
+      "export const fetchData = async () => helper();\n",
+      "utf-8",
+    );
+    const graph = await CodeGraphIndex.load(tmpDir);
+    await graph.buildFullIndex();
+    const impact = graph.impactOf("fetchData");
+    expect(impact.definedIn).toBe("src/api.ts");
   });
 
   it("returns ranked map within budget", async () => {

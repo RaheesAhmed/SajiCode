@@ -81,7 +81,12 @@ export function createCodeGraphTools(projectPath: string) {
     async () => {
       const graph = await getCodeGraph(projectPath);
       const count = await graph.buildFullIndex();
-      return `Rebuilt code graph — ${count} files indexed. Stored at .sajicode/codegraph.json`;
+      const { initTreeSitter, getTreeSitterInitError } = await import("../context/tree-sitter-parser.js");
+      const tsOk = await initTreeSitter();
+      return [
+        `Rebuilt code graph — ${count} files indexed. Stored at .sajicode/codegraph.json`,
+        tsOk ? "Parser: tree-sitter AST (with regex fallback for unsupported files)" : `Parser: regex fallback (${getTreeSitterInitError() ?? "tree-sitter unavailable"})`,
+      ].join("\n");
     },
     {
       name: "rebuild_code_graph",

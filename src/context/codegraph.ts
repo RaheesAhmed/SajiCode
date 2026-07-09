@@ -1,7 +1,13 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import {
+  parseWithTreeSitter,
+  resolveLang,
+  extractCallSitesRegex,
+  type ParsedCallSite,
+} from "./tree-sitter-parser.js";
 
-const GRAPH_VERSION = 1;
+const GRAPH_VERSION = 2;
 const GRAPH_FILE = "codegraph.json";
 
 const IGNORED_DIRS = new Set([
@@ -49,8 +55,10 @@ export interface GraphFileEntry {
   lineCount: number;
   symbols: GraphSymbol[];
   imports: string[];
-  /** Symbol names referenced in this file (heuristic call graph). */
+  /** Symbol names referenced via call expressions (AST when tree-sitter is available). */
   references: string[];
+  callSites?: ParsedCallSite[];
+  parser?: "tree-sitter" | "regex";
   rank: number;
 }
 
@@ -125,6 +133,42 @@ function extractReferences(content: string, knownSymbols: Set<string>): string[]
     if (pattern.test(content)) refs.add(name);
   }
   return [...refs];
+}
+
+async function parseFileStructure(
+  content: string,
+  ext: string,
+  allSymbolNames: Set<string>,
+): Promise<Pick<GraphFileEntry, "symbols" | "imports" | "references" | "callSites" | "parser">> {
+  const lang = resolveLang(ext);
+  if (lang) {
+    const ast = await parseWithTreeSitter(content, lang);
+    if (ast) {
+      return {
+        symbols: ast.symbols,
+        imports: ast.imports,
+        references: ast.references,
+        callSites: ast.callSites,
+        parser: "tree-sitter",
+      };
+    }
+  }
+
+  const symbols = extractSymbols(content, ext);
+  const imports = extractImports(content);
+  const callSites = extractCallSitesRegex(content);
+  const references = [...new Set([
+    ...extractReferences(content, allSymbolNames),
+    ...callSites.map((c) => c.symbol),
+  ])];
+
+  return {
+    symbols,
+    imports,
+    references,
+    callSites,
+    parser: "regex",
+  };
 }
 
 function computePageRanks(files: Record<string, GraphFileEntry>): void {
@@ -259,9 +303,31 @@ export class CodeGraphIndex {
       if (changed) updated++;
     }
 
+    await this.refreshCrossFileReferences(relPaths);
     this.recomputeRanks();
     await this.save();
     return updated;
+  }
+
+  /** Second pass: enrich regex-parsed files with global symbol call detection. */
+  private async refreshCrossFileReferences(relPaths: string[]): Promise<void> {
+    const allSymbolNames = new Set(
+      Object.values(this.snapshot.files).flatMap((f) => f.symbols.map((s) => s.name)),
+    );
+
+    for (const relPath of relPaths) {
+      const entry = this.snapshot.files[relPath.replace(/\\/g, "/")];
+      if (!entry || entry.parser === "tree-sitter") continue;
+
+      const absPath = path.join(this.snapshot.projectPath, relPath);
+      const content = await fs.readFile(absPath, "utf-8");
+      const callSites = extractCallSitesRegex(content);
+      entry.callSites = callSites;
+      entry.references = [...new Set([
+        ...extractReferences(content, allSymbolNames),
+        ...callSites.map((c) => c.symbol),
+      ])];
+    }
   }
 
   async updateFile(relPath: string): Promise<boolean> {
@@ -281,19 +347,21 @@ export class CodeGraphIndex {
 
     const content = await fs.readFile(absPath, "utf-8");
     const ext = path.extname(normalized).toLowerCase();
-    const symbols = extractSymbols(content, ext);
-    const imports = extractImports(content);
     const allSymbolNames = new Set(
       Object.values(this.snapshot.files).flatMap((f) => f.symbols.map((s) => s.name)),
     );
-    for (const sym of symbols) allSymbolNames.add(sym.name);
+
+    const parsed = await parseFileStructure(content, ext, allSymbolNames);
+    for (const sym of parsed.symbols) allSymbolNames.add(sym.name);
 
     this.snapshot.files[normalized] = {
       mtimeMs: stat.mtimeMs,
       lineCount: content.split("\n").length,
-      symbols,
-      imports,
-      references: extractReferences(content, allSymbolNames),
+      symbols: parsed.symbols,
+      imports: parsed.imports,
+      references: parsed.references,
+      ...(parsed.callSites?.length ? { callSites: parsed.callSites } : {}),
+      ...(parsed.parser ? { parser: parsed.parser } : {}),
       rank: 1,
     };
 
@@ -310,6 +378,18 @@ export class CodeGraphIndex {
     if (!needle) return hits;
 
     for (const [filePath, entry] of Object.entries(this.snapshot.files)) {
+      const callHits = entry.callSites?.filter((c) => c.symbol === needle) ?? [];
+      if (callHits.length > 0) {
+        for (const site of callHits) {
+          hits.push({
+            file: filePath,
+            line: site.line,
+            snippet: `calls ${needle} at L${site.line}`,
+          });
+        }
+        continue;
+      }
+
       if (!entry.references.includes(needle)) continue;
       hits.push({
         file: filePath,
@@ -318,7 +398,7 @@ export class CodeGraphIndex {
       });
     }
 
-    return hits.sort((a, b) => a.file.localeCompare(b.file));
+    return hits.sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line);
   }
 
   impactOf(symbolName: string): { definedIn: string | null; affectedFiles: string[] } {
@@ -367,6 +447,18 @@ export class CodeGraphIndex {
       focus ? `Focus: "${options.focus}"` : "",
       "",
     ].filter(Boolean);
+
+    const parserCounts = { "tree-sitter": 0, regex: 0 };
+    for (const entry of Object.values(this.snapshot.files)) {
+      if (entry.parser === "tree-sitter") parserCounts["tree-sitter"]++;
+      else parserCounts.regex++;
+    }
+    if (parserCounts["tree-sitter"] > 0) {
+      lines.push(
+        `Parser: ${parserCounts["tree-sitter"]} tree-sitter AST, ${parserCounts.regex} regex fallback`,
+        "",
+      );
+    }
 
     let used = lines.join("\n").length;
     let included = 0;
