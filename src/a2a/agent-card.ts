@@ -1,4 +1,5 @@
 import type { A2aAgentCard, A2aSkill } from "./types.js";
+import { PKG_VERSION } from "../version.js";
 
 export const SAJICODE_A2A_SKILLS: A2aSkill[] = [
   {
@@ -33,7 +34,7 @@ export const SAJICODE_A2A_SKILLS: A2aSkill[] = [
   },
 ];
 
-export function buildAgentCard(baseUrl: string, version = "1.2.4"): A2aAgentCard {
+export function buildAgentCard(baseUrl: string, version = PKG_VERSION): A2aAgentCard {
   const url = baseUrl.replace(/\/$/, "");
   return {
     name: "SajiCode",

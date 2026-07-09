@@ -1,6 +1,7 @@
 import { TavilySearch } from "@langchain/tavily";
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
+import { PKG_VERSION } from "../version.js";
 
 const PARALLEL_URL = "https://search.parallel.ai/mcp";
 const PARALLEL_TIMEOUT_MS = 25_000;
@@ -15,7 +16,7 @@ async function callParallelSearch(query: string): Promise<string> {
       headers: {
         "Content-Type": "application/json",
         Accept: "application/json, text/event-stream",
-        "User-Agent": "sajicode/1.2.3",
+        "User-Agent": `sajicode/${PKG_VERSION}`,
       },
       body: JSON.stringify({
         jsonrpc: "2.0",

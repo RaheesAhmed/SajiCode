@@ -31,6 +31,7 @@ import {
 } from "../plugins/registry.js";
 import { formatCostsReport } from "../observability/usage-tracker.js";
 import { fetchLatestCiFailureLog } from "../tools/deploy-tools.js";
+import { PKG_VERSION } from "../version.js";
 
 /** Heavy agent stack — only load for build/resume/audit, not config-doctor. */
 async function loadAgentRuntime() {
@@ -68,7 +69,7 @@ const program = new Command();
 program
   .name("sajicode")
   .description(ORANGE("🤖 SajiCode — The first AI engineering team you can install in one command"))
-  .version("1.0.0");
+  .version(PKG_VERSION);
 
 program
   .command("build")
