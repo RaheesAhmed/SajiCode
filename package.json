@@ -81,7 +81,7 @@
     "fs-extra": "^11.3.3",
     "glob": "^13.0.6",
     "langchain": "^1.5.3",
-    "langsmith": "^0.7.17",
+    "langsmith": "^0.8.1",
     "log-update": "^7.1.0",
     "marked": "^15.0.12",
     "marked-terminal": "^7.3.0",
